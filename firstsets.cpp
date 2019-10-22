@@ -4,7 +4,8 @@ static constexpr bool Debug = false;
 
 using namespace std::string_literals;
 
-enum struct Tok {
+enum struct Tok
+{
     none,
     eof,
     id,
@@ -21,22 +22,25 @@ enum struct Tok {
     epsilon
 };
 
-struct Bad_token_error {
+struct Bad_token_error
+{
 };
 
-struct Syntax_error {
+struct Syntax_error
+{
 };
 
-struct Scanner {
-    FILE* fp_; // input source.
+struct Scanner
+{
+    FILE*       fp_;       // input source.
     const char* filename_; // Input file name.
-    std::string line_; // current line
-    Tok la_; // look ahead
-    size_t la_pos_; // position of the look ahead token.
-    size_t pos_; // read pos in line
-    size_t lineno_; // Line number
-    std::string alfa_; // value of identifier for la_ == Tok::id
-    std::string literal_; // value of literal string
+    std::string line_;     // current line
+    Tok         la_;       // look ahead
+    size_t      la_pos_;   // position of the look ahead token.
+    size_t      pos_;      // read pos in line
+    size_t      lineno_;   // Line number
+    std::string alfa_;     // value of identifier for la_ == Tok::id
+    std::string literal_;  // value of literal string
 public:
     Scanner(FILE* fp, const char* filename)
         : fp_ { fp }
@@ -49,78 +53,50 @@ public:
         assert(fp != nullptr && !feof(fp));
         get();
     }
-    Tok token() const { return la_; }
+    Tok         token() const { return la_; }
     const char* filename() const { return filename_; }
-    size_t lineno() const { return lineno_; }
+    size_t      lineno() const { return lineno_; }
 
     std::string curr_token_str() const
     {
         using namespace std::string_literals;
-        switch (la_) {
-        default:
-            assert(false && "unreached");
-            return "Tok::none";
-        case Tok::alt:
-            return "|";
-        case Tok::colon:
-            return ":";
-        case Tok::lbrace:
-            return "{";
-        case Tok::rbrace:
-            return "}";
-        case Tok::lbrack:
-            return "[";
-        case Tok::rbrack:
-            return "]";
-        case Tok::lparen:
-            return "(";
-        case Tok::rparen:
-            return ")";
-        case Tok::eof:
-            return "END-OF-FILE";
-        case Tok::epsilon:
-            return "EPSILON";
-        case Tok::id:
-            return "ID("s + alfa_ + ")"s;
-        case Tok::literal:
-            return "LITERAL("s + literal_ + ")"s;
-        case Tok::semi:
-            return ";";
+        switch (la_)
+        {
+        default: assert(false && "unreached"); return "Tok::none";
+        case Tok::alt: return "|";
+        case Tok::colon: return ":";
+        case Tok::lbrace: return "{";
+        case Tok::rbrace: return "}";
+        case Tok::lbrack: return "[";
+        case Tok::rbrack: return "]";
+        case Tok::lparen: return "(";
+        case Tok::rparen: return ")";
+        case Tok::eof: return "END-OF-FILE";
+        case Tok::epsilon: return "EPSILON";
+        case Tok::id: return "ID("s + alfa_ + ")"s;
+        case Tok::literal: return "LITERAL("s + literal_ + ")"s;
+        case Tok::semi: return ";";
         }
     }
 
     static const char* string_for_token(Tok t)
     {
-        switch (t) {
-        default:
-            assert(false && "unreached");
-            return "Tok::none";
-        case Tok::alt:
-            return "|";
-        case Tok::colon:
-            return ":";
-        case Tok::lbrace:
-            return "{";
-        case Tok::rbrace:
-            return "}";
-        case Tok::lbrack:
-            return "[";
-        case Tok::rbrack:
-            return "]";
-        case Tok::lparen:
-            return "(";
-        case Tok::rparen:
-            return ")";
-        case Tok::eof:
-            return "end-of-file";
-        case Tok::epsilon:
-            return "EPSILON";
-        case Tok::id:
-            return "identifier";
-        case Tok::literal:
-            return "terminal-literal";
-        case Tok::semi:
-            return ";";
+        switch (t)
+        {
+        default: assert(false && "unreached"); return "Tok::none";
+        case Tok::alt: return "|";
+        case Tok::colon: return ":";
+        case Tok::lbrace: return "{";
+        case Tok::rbrace: return "}";
+        case Tok::lbrack: return "[";
+        case Tok::rbrack: return "]";
+        case Tok::lparen: return "(";
+        case Tok::rparen: return ")";
+        case Tok::eof: return "end-of-file";
+        case Tok::epsilon: return "EPSILON";
+        case Tok::id: return "identifier";
+        case Tok::literal: return "terminal-literal";
+        case Tok::semi: return ";";
         }
     }
 
@@ -139,12 +115,13 @@ public:
     {
         int c;
         line_.clear();
-        for (;;) {
+        for (;;)
+        {
             c = fgetc(fp_);
-            if (c == EOF || feof(fp_))
-                break;
+            if (c == EOF || feof(fp_)) break;
             line_ += static_cast<char>(c);
-            if (c == '\n') {
+            if (c == '\n')
+            {
                 ++lineno_;
                 break;
             }
@@ -153,32 +130,32 @@ public:
     }
     void skip_white_space()
     {
-        while (pos_ < line_.size() && isspace(line_[pos_]))
-            ++pos_;
+        while (pos_ < line_.size() && isspace(line_[pos_])) ++pos_;
     }
     void show_line()
     {
         const unsigned spaces_per_tab = 8;
-        unsigned charpos = 0;
-        unsigned col = 0;
-        for (auto c : line_) {
-            if (c == '\t') {
+        unsigned       charpos        = 0;
+        unsigned       col            = 0;
+        for (auto c : line_)
+        {
+            if (c == '\t')
+            {
                 unsigned n = spaces_per_tab - (col % spaces_per_tab);
                 col += (charpos < la_pos_ ? n : 0);
-                while (n-- > 0)
-                    putchar(' ');
-            } else {
+                while (n-- > 0) putchar(' ');
+            }
+            else
+            {
                 putchar(c);
                 col += (charpos < la_pos_ ? 1 : 0);
             }
             ++charpos;
         }
-        for (auto i = 0U; i < col; ++i)
-            putchar(' ');
+        for (auto i = 0U; i < col; ++i) putchar(' ');
         putchar('^');
         putchar('\n');
-        for (auto i = 0U; i < col; ++i)
-            putchar(' ');
+        for (auto i = 0U; i < col; ++i) putchar(' ');
         putchar('|');
         putchar('\n');
     }
@@ -194,7 +171,7 @@ public:
         assert(isalpha(line_[pos_]));
         alfa_ += line_[pos_++];
         while (pos_ < line_.size()
-            && (isalnum(line_[pos_]) || line_[pos_] == '-' || line_[pos_] == '_'))
+               && (isalnum(line_[pos_]) || line_[pos_] == '-' || line_[pos_] == '_'))
             alfa_ += line_[pos_++];
         if (alfa_ == "EPSILON")
             la_ = Tok::epsilon;
@@ -206,30 +183,28 @@ public:
         assert(line_[pos_] == '"');
         literal_.clear();
         literal_ += line_[pos_++];
-        for (;;) {
-            if (pos_ >= line_.size()) {
-                bad_token();
-            }
+        for (;;)
+        {
+            if (pos_ >= line_.size()) { bad_token(); }
             literal_ += line_[pos_++];
-            if (line_[pos_ - 1] == '"')
-                break;
+            if (line_[pos_ - 1] == '"') break;
         }
         la_ = Tok::literal;
     }
     void get()
     {
-        if (la_ == Tok::eof)
-            return;
+        if (la_ == Tok::eof) return;
         skip_white_space();
         la_pos_ = pos_;
-        if (pos_ >= line_.size()) {
+        if (pos_ >= line_.size())
+        {
             getline();
-            if (line_.size() == 0)
-                la_ = Tok::eof;
+            if (line_.size() == 0) la_ = Tok::eof;
             return get();
         }
         char c = line_[pos_];
-        switch (c) {
+        switch (c)
+        {
         case '|':
             la_ = Tok::alt;
             ++pos_;
@@ -266,19 +241,19 @@ public:
             la_ = Tok::rparen;
             ++pos_;
             break;
-        case '"':
-            return scan_literal();
+        case '"': return scan_literal();
         default:
-            if (isalpha(c)) {
-                return scan_id();
-            } else {
+            if (isalpha(c)) { return scan_id(); }
+            else
+            {
                 bad_token();
             }
         }
     }
 };
 
-enum class ItemKind {
+enum class ItemKind
+{
     none,
     terminal,
     nonterminal,
@@ -288,7 +263,8 @@ enum class ItemKind {
     grouped_sequence
 };
 
-struct Item abstract {
+struct Item abstract
+{
     ItemKind kind_;
     Item(ItemKind k)
         : kind_ { k }
@@ -299,45 +275,32 @@ struct Item abstract {
 
     virtual ~Item() = 0 {}
 
-    template <typename T>
-    T* as()
+    template <typename T> T* as()
     {
         static_assert(std::is_base_of_v<Item, T>);
         assert(is<T>());
         return dynamic_cast<T*>(this);
     }
 
-    template <typename T>
-    const T* as() const
+    template <typename T> const T* as() const
     {
         static_assert(std::is_base_of_v<Item, T>);
         assert(is<T>());
         return dynamic_cast<const T*>(this);
     }
 
-    template <typename T>
-    const T* only_if() const
-    {
-        return dynamic_cast<const T*>(this);
-    }
+    template <typename T> const T* only_if() const { return dynamic_cast<const T*>(this); }
 
-    template <typename T>
-    T* only_if()
-    {
-        return dynamic_cast<T*>(this);
-    }
+    template <typename T> T* only_if() { return dynamic_cast<T*>(this); }
 
-    template <typename T>
-    bool is() const
-    {
-        return this->only_if<T>() != nullptr;
-    }
+    template <typename T> bool is() const { return this->only_if<T>() != nullptr; }
 };
 
 using ItemList = std::vector<Item*>;
 
 // Type representing a single terminal. E.g, "foo" that is to be matched exactly.
-struct Terminal : Item {
+struct Terminal : Item
+{
     std::string name; // Also the value.
     Terminal(const std::string& n)
         : Item { ItemKind::terminal }
@@ -347,7 +310,8 @@ struct Terminal : Item {
 };
 
 // Type representing the empty production "ε"
-struct Epsilon : Item {
+struct Epsilon : Item
+{
     Epsilon()
         : Item { ItemKind::epsilon }
     {
@@ -355,7 +319,8 @@ struct Epsilon : Item {
 };
 
 // Type representing a non-terminal, which appears on the LHS of productions.
-struct NonTerminal : Item {
+struct NonTerminal : Item
+{
     std::string name; // Name of the non-terminal.
     NonTerminal(const std::string& n)
         : Item { ItemKind::nonterminal }
@@ -365,7 +330,8 @@ struct NonTerminal : Item {
 };
 
 // Type representing a sequence of "items" in a single production rule.
-struct ItemSequence : Item {
+struct ItemSequence : Item
+{
     ItemSequence()
         : Item { ItemKind::sequence }
     {
@@ -375,7 +341,8 @@ struct ItemSequence : Item {
 
 // Type representing a list of alternatives in a production. This type will not be present
 // in normalized grammars.
-struct Alternatives : Item {
+struct Alternatives : Item
+{
     Alternatives()
         : Item { ItemKind::alternatives }
     {
@@ -387,7 +354,8 @@ struct Alternatives : Item {
 //	{ "+" Term }            contents occur 0 or more times
 //	[ "-" Expression ]      contents occur 0 or 1 time
 //  ( "-" | "+" )           contents occur exactly 1 time
-struct GroupedItemSequence : Item {
+struct GroupedItemSequence : Item
+{
     Tok group_kind_;
 
 public:
@@ -402,9 +370,10 @@ public:
 };
 
 // Type representing a production. "rhs" can be Epsilon, ItemSequence or Alternatives.
-struct Production {
+struct Production
+{
     NonTerminal* lhs_ = nullptr;
-    Item* rhs_ = nullptr;
+    Item*        rhs_ = nullptr;
 
     Production(NonTerminal* lhs, Item* rhs)
         : lhs_ { lhs }
@@ -412,10 +381,10 @@ struct Production {
     {
     }
 
-    NonTerminal* lhs() { return lhs_; }
+    NonTerminal*       lhs() { return lhs_; }
     const NonTerminal* lhs() const { return lhs_; }
-    Item* rhs() { return rhs_; }
-    const Item* rhs() const { return rhs_; }
+    Item*              rhs() { return rhs_; }
+    const Item*        rhs() const { return rhs_; }
 
     void set_rhs(Item* item)
     {
@@ -426,9 +395,10 @@ struct Production {
 };
 
 // Type representing a normalized production. "rhs" can be Epsilon or ItemSequence
-struct NormalizedProduction {
+struct NormalizedProduction
+{
     NonTerminal* lhs_ = nullptr;
-    Item* rhs_ = nullptr;
+    Item*        rhs_ = nullptr;
 
     NormalizedProduction(NonTerminal* lhs)
         : lhs_ { lhs }
@@ -436,14 +406,11 @@ struct NormalizedProduction {
         assert(lhs_->is<NonTerminal>());
     }
 
-    const Item* rhs() const { return rhs_; }
-    Item* rhs() { return rhs_; }
+    const Item*        rhs() const { return rhs_; }
+    Item*              rhs() { return rhs_; }
     const NonTerminal* lhs() const { return lhs_; }
-    NonTerminal* lhs() { return lhs_; }
-    void set_rhs(Item* item)
-    {
-        rhs_ = item;
-    }
+    NonTerminal*       lhs() { return lhs_; }
+    void               set_rhs(Item* item) { rhs_ = item; }
 };
 
 // Type representing a list of productions in the grammar.
@@ -454,8 +421,9 @@ using NormalizedProductionList = std::vector<NormalizedProduction*>;
 
 // Grammar parser. Parses productions and stores them in EBNF form. Then simplifies them
 // to simple CFG on request.
-struct Parser {
-    Scanner& scn_; // The scanner being used
+struct Parser
+{
+    Scanner&       scn_;   // The scanner being used
     ProductionList prods_; // The list of productions parsed
 public:
     Parser(Scanner& scn)
@@ -476,7 +444,8 @@ public:
     {
         if (scn_.token() == t)
             scn_.get();
-        else {
+        else
+        {
             std::string msgbuf;
             msgbuf += "expected ";
             msgbuf += Scanner::string_for_token(t);
@@ -494,15 +463,20 @@ public:
 
     Item* scan_name_or_symbol()
     {
-        if (next_is(Tok::id)) {
+        if (next_is(Tok::id))
+        {
             auto name = scn_.identifier();
             gettoken();
             return new NonTerminal { name };
-        } else if (next_is(Tok::literal)) {
+        }
+        else if (next_is(Tok::literal))
+        {
             auto lit = scn_.literal();
             scn_.get();
             return new Terminal { lit };
-        } else {
+        }
+        else
+        {
             syntax_error("unexpected token "s + scn_.curr_token_str());
             return new Epsilon {}; // not reached.
         }
@@ -513,15 +487,16 @@ public:
         auto group_clause = new GroupedItemSequence { token() };
         gettoken();
         group_clause->contents = scan_alternatives();
-        require(group_clause->group_kind() == Tok::lbrace ? Tok::rbrace : group_clause->group_kind() == Tok::lbrack ? Tok::rbrack : Tok::rparen);
+        require(group_clause->group_kind() == Tok::lbrace
+                    ? Tok::rbrace
+                    : group_clause->group_kind() == Tok::lbrack ? Tok::rbrack : Tok::rparen);
         return group_clause;
     }
 
     Item* scan_production_item()
     {
-        if (next_is(Tok::lbrace) || next_is(Tok::lbrack) || next_is(Tok::lparen)) {
-            return scan_production_item_seq_clause();
-        }
+        if (next_is(Tok::lbrace) || next_is(Tok::lbrack) || next_is(Tok::lparen))
+        { return scan_production_item_seq_clause(); }
         return scan_name_or_symbol();
     }
 
@@ -530,25 +505,23 @@ public:
     Item* scan_production_item_seq()
     {
         auto item = scan_production_item();
-        if (!(next_is(Tok::id)
-                || next_is(Tok::literal)
-                || next_is(Tok::lbrace)
-                || next_is(Tok::lbrack)
-                || next_is(Tok::lparen))) {
-            return item;
-        }
+        if (!(next_is(Tok::id) || next_is(Tok::literal) || next_is(Tok::lbrace)
+              || next_is(Tok::lbrack) || next_is(Tok::lparen)))
+        { return item; }
         auto result = new ItemSequence;
         result->sequence.push_back(item);
-        while (next_is(Tok::id)
-            || next_is(Tok::literal)
-            || next_is(Tok::lbrace)
-            || next_is(Tok::lbrack)
-            || next_is(Tok::lparen)) {
+        while (next_is(Tok::id) || next_is(Tok::literal) || next_is(Tok::lbrace)
+               || next_is(Tok::lbrack) || next_is(Tok::lparen))
+        {
             item = scan_production_item();
-            if (auto items = item->only_if<ItemSequence>()) {
+            if (auto items = item->only_if<ItemSequence>())
+            {
                 // Concatenate sequences.
-                result->sequence.insert(result->sequence.end(), items->sequence.begin(), items->sequence.end());
-            } else {
+                result->sequence.insert(
+                    result->sequence.end(), items->sequence.begin(), items->sequence.end());
+            }
+            else
+            {
                 result->sequence.push_back(item);
             }
         }
@@ -557,7 +530,8 @@ public:
 
     Item* scan_single_alternative()
     {
-        if (next_is(Tok::epsilon)) {
+        if (next_is(Tok::epsilon))
+        {
             auto item = new Epsilon {};
             gettoken();
             return item;
@@ -570,12 +544,11 @@ public:
     Item* scan_alternatives()
     {
         auto prodalt = scan_single_alternative();
-        if (!next_is(Tok::alt)) {
-            return prodalt;
-        }
+        if (!next_is(Tok::alt)) { return prodalt; }
         Alternatives* alt = new Alternatives;
         alt->alternatives.push_back(prodalt);
-        while (next_is(Tok::alt)) {
+        while (next_is(Tok::alt))
+        {
             gettoken();
             prodalt = scan_single_alternative();
             alt->alternatives.push_back(prodalt);
@@ -604,11 +577,12 @@ public:
         //      SingleAlternative = ProductionItemSeq | 'EPSILON'
         //      ProductionItemSeq = ProductionItem { ProductionItem }
         //      ProductionItem = NameOrSymbol | ProductionItemSeqClause
-        //      ProductionItemSeqClause = '{' Alternatives '}' | '[' Alternatives ']' | '(' Alternatives ')'
-        //      NameOrSymbol = Identifier | LiteralInQuotes
+        //      ProductionItemSeqClause = '{' Alternatives '}' | '[' Alternatives ']' | '('
+        //      Alternatives ')' NameOrSymbol = Identifier | LiteralInQuotes
         auto prod = scan_production();
         prods_.push_back(prod);
-        while (next_is(Tok::id)) {
+        while (next_is(Tok::id))
+        {
             prod = scan_production();
             prods_.push_back(prod);
         }
@@ -616,10 +590,10 @@ public:
 
     void test_lexer()
     {
-        for (;;) {
+        for (;;)
+        {
             printf("%s\n", scn_.curr_token_str().c_str());
-            if (scn_.token() == Tok::eof)
-                break;
+            if (scn_.token() == Tok::eof) break;
             scn_.get();
         }
     }
@@ -627,16 +601,13 @@ public:
     static std::string production_item_text(const Item* proditem)
     {
         std::string buf;
-        switch (proditem->kind()) {
-        default:
-            assert(false && "unreached");
-            break;
+        switch (proditem->kind())
+        {
+        default: assert(false && "unreached"); break;
         case ItemKind::alternatives:
             buf += production_alternatives_text(proditem->as<Alternatives>());
             break;
-        case ItemKind::epsilon:
-            buf += "EPSILON ";
-            break;
+        case ItemKind::epsilon: buf += "EPSILON "; break;
         case ItemKind::grouped_sequence:
             buf += grouped_item_sequence_text(proditem->as<GroupedItemSequence>());
             break;
@@ -658,9 +629,7 @@ public:
     static std::string production_item_seq_text(const ItemSequence* seq)
     {
         std::string buf;
-        for (auto&& item : seq->sequence) {
-            buf += production_item_text(item);
-        }
+        for (auto&& item : seq->sequence) { buf += production_item_text(item); }
         return buf;
     }
 
@@ -670,10 +639,8 @@ public:
         buf += Scanner::string_for_token(group_clause->group_kind());
         buf += production_item_text(group_clause->contents);
         buf += (group_clause->group_kind() == Tok::lbrace
-                ? '}'
-                : (group_clause->group_kind() == Tok::lbrack
-                        ? ']'
-                        : ')'));
+                    ? '}'
+                    : (group_clause->group_kind() == Tok::lbrack ? ']' : ')'));
         buf += ' ';
         return buf;
     }
@@ -681,9 +648,11 @@ public:
     static std::string production_alternatives_text(const Alternatives* prodalts)
     {
         std::string buf;
-        bool first = true;
-        for (auto& item : prodalts->alternatives) {
-            if (!first) {
+        bool        first = true;
+        for (auto& item : prodalts->alternatives)
+        {
+            if (!first)
+            {
                 buf += '|';
                 buf += ' ';
             }
@@ -696,7 +665,8 @@ public:
     static std::string productions_text(const ProductionList& prods)
     {
         std::string buf;
-        for (auto prod : prods) {
+        for (auto prod : prods)
+        {
             buf += prod->lhs()->name;
             buf += ' ';
             buf += ':';
@@ -709,7 +679,8 @@ public:
     static std::string productions_text(const NormalizedProductionList& prods)
     {
         std::string buf;
-        for (auto prod : prods) {
+        for (auto prod : prods)
+        {
             buf += prod->lhs()->name;
             buf += ' ';
             buf += ':';
@@ -727,16 +698,16 @@ public:
 std::pair<ItemList, std::vector<unsigned>>
 find_sequence_or_optional_clause(const NormalizedProduction* prod)
 {
-    ItemList clauses;
+    ItemList              clauses;
     std::vector<unsigned> locations;
-    unsigned loc = 0;
-    auto rhs = prod->rhs();
+    unsigned              loc = 0;
+    auto                  rhs = prod->rhs();
     assert(rhs->is<Epsilon>() || rhs->is<ItemSequence>());
-    if (rhs->is<Epsilon>()) {
-        return { {}, {} };
-    }
-    for (auto seqitem : rhs->as<ItemSequence>()->sequence) {
-        if (auto p = seqitem->only_if<GroupedItemSequence>()) {
+    if (rhs->is<Epsilon>()) { return { {}, {} }; }
+    for (auto seqitem : rhs->as<ItemSequence>()->sequence)
+    {
+        if (auto p = seqitem->only_if<GroupedItemSequence>())
+        {
             clauses.push_back(p);
             locations.push_back(loc);
         }
@@ -746,16 +717,19 @@ find_sequence_or_optional_clause(const NormalizedProduction* prod)
 }
 
 std::pair<ItemList, std::vector<NonTerminal*>>
-replace_sequence_or_optional_clauses(const Item* rhs, const std::vector<unsigned>& locations, unsigned name_seq)
+replace_sequence_or_optional_clauses(const Item*                  rhs,
+                                     const std::vector<unsigned>& locations,
+                                     unsigned                     name_seq)
 {
-    if (locations.size() == 0)
-        return { {}, {} };
-    ItemList itemseq;
-    auto&& prodseq = rhs->as<ItemSequence>()->sequence;
+    if (locations.size() == 0) return { {}, {} };
+    ItemList                  itemseq;
+    auto&&                    prodseq = rhs->as<ItemSequence>()->sequence;
     std::vector<NonTerminal*> invented_nonterminals;
-    unsigned i = 0;
-    for (auto loc : locations) {
-        while (i < loc) {
+    unsigned                  i = 0;
+    for (auto loc : locations)
+    {
+        while (i < loc)
+        {
             itemseq.push_back(prodseq[i]);
             ++i;
         }
@@ -767,30 +741,33 @@ replace_sequence_or_optional_clauses(const Item* rhs, const std::vector<unsigned
         ++i;
     }
     // Copy any remaining.
-    while (i < prodseq.size())
-        itemseq.push_back(prodseq[i++]);
+    while (i < prodseq.size()) itemseq.push_back(prodseq[i++]);
     return { std::move(itemseq), std::move(invented_nonterminals) };
 }
 
 void generate_invented_productions(const std::vector<NonTerminal*>& nt_list,
-    const ItemList& seq_clause_list,
-    NormalizedProductionList& prod_accum)
+                                   const ItemList&                  seq_clause_list,
+                                   NormalizedProductionList&        prod_accum)
 {
     unsigned i = 0;
     assert(nt_list.size() == seq_clause_list.size());
-    for (auto& item : seq_clause_list) {
+    for (auto& item : seq_clause_list)
+    {
         assert(item->is<GroupedItemSequence>());
         auto group_clause = item->as<GroupedItemSequence>();
 
-        switch (group_clause->group_kind()) {
-        case Tok::lparen: {
+        switch (group_clause->group_kind())
+        {
+        case Tok::lparen:
+        {
 
             auto newprod = new NormalizedProduction { nt_list[i] };
             newprod->set_rhs(group_clause->contents);
             prod_accum.push_back(newprod);
             break;
         }
-        case Tok::lbrack: {
+        case Tok::lbrack:
+        {
             // Add  N_k -> EPSILON
             //      N_k -> <seq>
             auto newprod = new NormalizedProduction { nt_list[i] };
@@ -801,19 +778,21 @@ void generate_invented_productions(const std::vector<NonTerminal*>& nt_list,
             prod_accum.push_back(newprod);
             break;
         }
-        case Tok::lbrace: {
+        case Tok::lbrace:
+        {
             // Add  N_k -> EPSILON
             //      N_k -> <seq> N_k
             auto newprod = new NormalizedProduction { nt_list[i] };
             newprod->set_rhs(new Epsilon);
             prod_accum.push_back(newprod);
-            newprod = new NormalizedProduction { nt_list[i] };
+            newprod  = new NormalizedProduction { nt_list[i] };
             auto seq = new ItemSequence;
-            if (auto gcseq = group_clause->contents->only_if<ItemSequence>()) {
-                for (auto item : gcseq->sequence) {
-                    seq->sequence.push_back(item);
-                }
-            } else {
+            if (auto gcseq = group_clause->contents->only_if<ItemSequence>())
+            {
+                for (auto item : gcseq->sequence) { seq->sequence.push_back(item); }
+            }
+            else
+            {
                 seq->sequence.push_back(group_clause->contents);
             }
             seq->sequence.push_back(nt_list[i]);
@@ -821,8 +800,7 @@ void generate_invented_productions(const std::vector<NonTerminal*>& nt_list,
             prod_accum.push_back(newprod);
             break;
         }
-        default:
-            assert(false && "unreached");
+        default: assert(false && "unreached");
         }
     }
 }
@@ -835,29 +813,37 @@ void generate_invented_productions(const std::vector<NonTerminal*>& nt_list,
 void remove_alternatives(const NormalizedProductionList& prodlist, NormalizedProductionList& result)
 {
 
-    for (auto prod : prodlist) {
+    for (auto prod : prodlist)
+    {
         if (Debug)
-            printf("*** removing alternatives for %s -> %s\n", prod->lhs()->name.c_str(), 
-                Parser::production_item_text(prod->rhs()).c_str());
+            printf("*** removing alternatives for %s -> %s\n",
+                   prod->lhs()->name.c_str(),
+                   Parser::production_item_text(prod->rhs()).c_str());
 
-        if (prod->rhs()->is<Alternatives>()) {
+        if (prod->rhs()->is<Alternatives>())
+        {
             auto alternatives = prod->rhs()->as<Alternatives>()->alternatives;
-            for (auto i = 0U; i < alternatives.size(); ++i) {
+            for (auto i = 0U; i < alternatives.size(); ++i)
+            {
                 auto nprod = new NormalizedProduction { prod->lhs() };
-                if (alternatives[i]->is<ItemSequence>() || alternatives[i]->is<Epsilon>()) {
-                    nprod->set_rhs(alternatives[i]);
-                } else {
+                if (alternatives[i]->is<ItemSequence>() || alternatives[i]->is<Epsilon>())
+                { nprod->set_rhs(alternatives[i]); }
+                else
+                {
                     auto seq = new ItemSequence;
                     seq->sequence.push_back(alternatives[i]);
                     nprod->set_rhs(seq);
                 }
                 result.push_back(nprod);
             }
-        } else {
+        }
+        else
+        {
             auto nprod = new NormalizedProduction { prod->lhs() };
-            if (prod->rhs()->is<ItemSequence>() || prod->rhs()->is<Epsilon>()) {
-                nprod->set_rhs(prod->rhs());
-            } else {
+            if (prod->rhs()->is<ItemSequence>() || prod->rhs()->is<Epsilon>())
+            { nprod->set_rhs(prod->rhs()); }
+            else
+            {
                 // Single item: normalize by creating an item sequence of 1 element.
                 auto seq = new ItemSequence;
                 seq->sequence.push_back(prod->rhs());
@@ -872,15 +858,17 @@ NormalizedProductionList normalize(const ProductionList& prodlist)
 {
     NormalizedProductionList result;
 
-    for (auto& orig_prod : prodlist) {
+    for (auto& orig_prod : prodlist)
+    {
         auto nprod = new NormalizedProduction { orig_prod->lhs() };
         nprod->set_rhs(orig_prod->rhs());
         result.push_back(nprod);
     }
 
-    bool something_to_do = true;
-    unsigned name_seq = 1;
-    while (something_to_do) {
+    bool     something_to_do = true;
+    unsigned name_seq        = 1;
+    while (something_to_do)
+    {
         // Step 1: remove alternatives and replace by expanded productions.
         NormalizedProductionList loc_result;
         remove_alternatives(result, loc_result);
@@ -888,7 +876,8 @@ NormalizedProductionList normalize(const ProductionList& prodlist)
         bool alternatives_removed = (result.size() != loc_result.size());
 
         if (Debug)
-            printf("*** after removing alternatives:\n%s\n", Parser::productions_text(result).c_str());
+            printf("*** after removing alternatives:\n%s\n",
+                   Parser::productions_text(result).c_str());
 
         // Step 2:
         // Convert all productions involving [] and {} in this fashion:
@@ -910,19 +899,21 @@ NormalizedProductionList normalize(const ProductionList& prodlist)
         //      A -> <alpha> N <gamma>
         //      N -> <beta>
         // For each sequence-or-optional-clause on the RHS we replace by invented non-terminals and
-        // for each such non-terminal add the above productions. Since <beta> in the above cases itself
-        // can contain an alternative clause, we need to do this iteratively till there are
+        // for each such non-terminal add the above productions. Since <beta> in the above cases
+        // itself can contain an alternative clause, we need to do this iteratively till there are
         // no such clauses left.
         NormalizedProductionList invented_productions;
-        for (auto normprod : result) {
+        for (auto normprod : result)
+        {
             // clause_items: list of all sequence or optional clauses
             // locations: list of all the indices in normprod they occur at
             auto [clause_items, locations] = find_sequence_or_optional_clause(normprod);
             assert(clause_items.size() == locations.size());
             auto [new_seq, invented_nonterminals]
                 = replace_sequence_or_optional_clauses(normprod->rhs(), locations, name_seq);
-            if (invented_nonterminals.size() > 0) {
-                auto new_item_seq = new ItemSequence;
+            if (invented_nonterminals.size() > 0)
+            {
+                auto new_item_seq      = new ItemSequence;
                 new_item_seq->sequence = std::move(new_seq);
                 normprod->set_rhs(new_item_seq);
             }
@@ -933,13 +924,13 @@ NormalizedProductionList normalize(const ProductionList& prodlist)
         something_to_do = invented_productions.size() > 0 || alternatives_removed;
         result.insert(result.end(), invented_productions.begin(), invented_productions.end());
         if (Debug)
-            printf("*** after transforming sequences:\n%s\n", Parser::productions_text(result).c_str());
+            printf("*** after transforming sequences:\n%s\n",
+                   Parser::productions_text(result).c_str());
     }
 
     // Final check.
-    for (auto prod : result) {
-        assert(prod->rhs()->is<Epsilon>() || prod->rhs()->is<ItemSequence>());
-    }
+    for (auto prod : result)
+    { assert(prod->rhs()->is<Epsilon>() || prod->rhs()->is<ItemSequence>()); }
 
     return result;
 }
@@ -947,35 +938,41 @@ NormalizedProductionList normalize(const ProductionList& prodlist)
 ProductionList read_grammar(const char* fname)
 {
     FILE* fp = fopen(fname, "r");
-    if (fp == nullptr) {
+    if (fp == nullptr)
+    {
         perror(("can't open: "s + fname).c_str());
         exit(2);
     }
     Scanner scn { fp, fname };
-    Parser p { scn };
+    Parser  p { scn };
     p.parse();
     return p.productions();
 }
 
-struct CmpItem {
+struct CmpItem
+{
     bool operator()(const Item* lhs, const Item* rhs) const
     {
         assert(lhs->kind() == ItemKind::terminal || lhs->kind() == ItemKind::nonterminal);
         assert(rhs->kind() == ItemKind::terminal || rhs->kind() == ItemKind::nonterminal);
-        auto&& lhs_name = lhs->kind() == ItemKind::terminal ? lhs->as<Terminal>()->name : lhs->as<NonTerminal>()->name;
-        auto&& rhs_name = rhs->kind() == ItemKind::terminal ? rhs->as<Terminal>()->name : rhs->as<NonTerminal>()->name;
+        auto&& lhs_name = lhs->kind() == ItemKind::terminal ? lhs->as<Terminal>()->name
+                                                            : lhs->as<NonTerminal>()->name;
+        auto&& rhs_name = rhs->kind() == ItemKind::terminal ? rhs->as<Terminal>()->name
+                                                            : rhs->as<NonTerminal>()->name;
         return lhs_name < rhs_name;
     }
 };
 
-struct CmpTerminal {
+struct CmpTerminal
+{
     bool operator()(const Terminal* lhs, const Terminal* rhs) const
     {
         return lhs->name < rhs->name;
     }
 };
 
-struct CmpNonTerminal {
+struct CmpNonTerminal
+{
     bool operator()(const NonTerminal* lhs, const NonTerminal* rhs) const
     {
         return lhs->name < rhs->name;
@@ -984,14 +981,15 @@ struct CmpNonTerminal {
 
 // Type representing function from terminal/non-terminals -> set of terminals, used in computing
 // FIRST and FOLLOW
-using TerminalSet = std::set<const Terminal*, CmpTerminal>;
-using NonTerminalSet = std::set<const NonTerminal*, CmpNonTerminal>;
+using TerminalSet          = std::set<const Terminal*, CmpTerminal>;
+using NonTerminalSet       = std::set<const NonTerminal*, CmpNonTerminal>;
 using ItemToTerminalSetMap = std::map<const Item*, TerminalSet*, CmpItem>;
 
-struct TopDownParsingSets {
-    NonTerminalSet epsilon_;
-    ItemToTerminalSetMap predict_, follow_;
-    bool any_changes_ = false;
+struct TopDownParsingSets
+{
+    NonTerminalSet                  epsilon_;
+    ItemToTerminalSetMap            predict_, follow_;
+    bool                            any_changes_ = false;
     const NormalizedProductionList& prods_;
 
     TopDownParsingSets(const NormalizedProductionList& prods)
@@ -1006,13 +1004,12 @@ struct TopDownParsingSets {
     // nature of the process.
     bool is_seq_nullable(const ItemList& seq)
     {
-        for (auto&& elem : seq) {
+        for (auto&& elem : seq)
+        {
             // This is not a non-terminal. Sequence cannot be nullable.
-            if (!elem->only_if<NonTerminal>())
-                return false;
+            if (!elem->only_if<NonTerminal>()) return false;
 
-            if (epsilon_.find(elem->as<NonTerminal>()) == epsilon_.end())
-                return false;
+            if (epsilon_.find(elem->as<NonTerminal>()) == epsilon_.end()) return false;
         }
         return true;
     }
@@ -1021,11 +1018,15 @@ struct TopDownParsingSets {
     //  - Any non-terminal that has a production containing only non-terminals that are in EPSILON
     void do_epsilon()
     {
-        for (auto&& P : prods_) {
-            if (P->rhs()->is<Epsilon>()) {
+        for (auto&& P : prods_)
+        {
+            if (P->rhs()->is<Epsilon>())
+            {
                 auto [_, inserted] = epsilon_.insert(P->lhs());
                 any_changes_ |= inserted;
-            } else if (is_seq_nullable(P->rhs()->as<ItemSequence>()->sequence)) {
+            }
+            else if (is_seq_nullable(P->rhs()->as<ItemSequence>()->sequence))
+            {
                 auto [_, inserted] = epsilon_.insert(P->lhs());
                 any_changes_ |= inserted;
             }
@@ -1035,12 +1036,15 @@ struct TopDownParsingSets {
     void insert_into_set(ItemToTerminalSetMap& mapref, const Item* item, const Terminal* t)
     {
         auto iter = mapref.find(item);
-        if (iter == mapref.end()) {
+        if (iter == mapref.end())
+        {
             auto ptr = new TerminalSet;
             ptr->insert(t);
             mapref[item] = ptr;
             any_changes_ = true;
-        } else {
+        }
+        else
+        {
             auto [_, inserted] = (*iter).second->insert(t);
             any_changes_ |= inserted;
         }
@@ -1060,8 +1064,9 @@ struct TopDownParsingSets {
     {
         auto iter = mapref.find(nt);
 
-        if (iter == mapref.end()) {
-            auto ptr = new TerminalSet;
+        if (iter == mapref.end())
+        {
+            auto ptr   = new TerminalSet;
             mapref[nt] = ptr;
             return *ptr;
         }
@@ -1079,25 +1084,24 @@ struct TopDownParsingSets {
     //  - if A =>* epsilon, i.e., A is in EPSILON, every token in FOLLOW(A).
     void do_predict()
     {
-        for (auto&& P : prods_) {
+        for (auto&& P : prods_)
+        {
             if (Debug)
-                printf("*** predict: prod'n: %s->%s\n", Parser::production_item_text(P->lhs()).c_str(),
-                    Parser::production_item_text(P->rhs()).c_str());
+                printf("*** predict: prod'n: %s->%s\n",
+                       Parser::production_item_text(P->lhs()).c_str(),
+                       Parser::production_item_text(P->rhs()).c_str());
 
-            if (P->rhs()->is<Epsilon>())
-                continue;
+            if (P->rhs()->is<Epsilon>()) continue;
             auto&& first_elem = P->rhs()->as<ItemSequence>()->sequence[0];
-            if (auto t = first_elem->only_if<Terminal>()) {
-                insert_into_predict_set(P->lhs(), t);
-            } else if (auto elem = first_elem->only_if<NonTerminal>()) {
-                for (auto&& t : predict_set_for(elem)) {
-                    insert_into_predict_set(P->lhs(), t);
-                }
+            if (auto t = first_elem->only_if<Terminal>()) { insert_into_predict_set(P->lhs(), t); }
+            else if (auto elem = first_elem->only_if<NonTerminal>())
+            {
+                for (auto&& t : predict_set_for(elem)) { insert_into_predict_set(P->lhs(), t); }
             }
-            if (epsilon_.find(P->lhs()) != epsilon_.end()) {
-                for (auto&& terminal : follow_set_for(P->lhs())) {
-                    insert_into_predict_set(P->lhs(), terminal);
-                }
+            if (epsilon_.find(P->lhs()) != epsilon_.end())
+            {
+                for (auto&& terminal : follow_set_for(P->lhs()))
+                { insert_into_predict_set(P->lhs(), terminal); }
             }
         }
     }
@@ -1110,33 +1114,38 @@ struct TopDownParsingSets {
     //    B, every token in FOLLOW(B)
     void do_follow()
     {
-        for (auto&& P : prods_) {
+        for (auto&& P : prods_)
+        {
             if (Debug)
-                printf("*** follow: prod'n: %s->%s\n", Parser::production_item_text(P->lhs()).c_str(),
-                    Parser::production_item_text(P->rhs()).c_str());
+                printf("*** follow: prod'n: %s->%s\n",
+                       Parser::production_item_text(P->lhs()).c_str(),
+                       Parser::production_item_text(P->rhs()).c_str());
 
-            if (P->rhs()->is<Epsilon>())
-                continue;
+            if (P->rhs()->is<Epsilon>()) continue;
             auto&& items = P->rhs()->as<ItemSequence>()->sequence;
-            for (auto it = items.begin(); it != items.end(); ++it) {
-                if (auto* A = (*it)->only_if<NonTerminal>()) {
-                    if (it + 1 != items.end()) {
+            for (auto it = items.begin(); it != items.end(); ++it)
+            {
+                if (auto* A = (*it)->only_if<NonTerminal>())
+                {
+                    if (it + 1 != items.end())
+                    {
                         // What follows A?
                         auto it2 = it + 1;
                         if (auto* tptr = (*it2)->only_if<Terminal>())
                             insert_into_follow_set(A, tptr);
-                        else if (auto* B = (*it2)->only_if<NonTerminal>()) {
-                            for (auto t : predict_set_for(B)) {
-                                insert_into_follow_set(A, t);
-                            }
-                        } else {
+                        else if (auto* B = (*it2)->only_if<NonTerminal>())
+                        {
+                            for (auto t : predict_set_for(B)) { insert_into_follow_set(A, t); }
+                        }
+                        else
+                        {
                             assert(false && "unreached");
                         }
-                    } else {
+                    }
+                    else
+                    {
                         // A is rightmost in the production
-                        for (auto t : follow_set_for(P->lhs())) {
-                            insert_into_follow_set(A, t);
-                        }
+                        for (auto t : follow_set_for(P->lhs())) { insert_into_follow_set(A, t); }
                     }
                 }
             }
@@ -1147,7 +1156,7 @@ struct TopDownParsingSets {
     // we take as the LHS of the first production.
     void do_follow_special_rule()
     {
-        auto first_prod = prods_[0];
+        auto first_prod  = prods_[0];
         auto end_of_file = new Terminal { "end-of-file" };
         insert_into_follow_set(first_prod->lhs(), end_of_file);
     }
@@ -1155,7 +1164,8 @@ struct TopDownParsingSets {
     void compute()
     {
         do_follow_special_rule();
-        do {
+        do
+        {
             any_changes_ = false;
             do_epsilon();
             do_predict();
@@ -1166,7 +1176,8 @@ struct TopDownParsingSets {
     std::string epsilon_set_text()
     {
         std::string buf = "EPSILON = {\n";
-        for (auto nt : epsilon_) {
+        for (auto nt : epsilon_)
+        {
             buf += nt->name;
             buf += ",\n";
         }
@@ -1177,13 +1188,16 @@ struct TopDownParsingSets {
     static std::string text_for_set(const char* name, const ItemToTerminalSetMap& mapref)
     {
         std::string buf;
-        for (auto&& entry : mapref) {
-            if (auto ptr = entry.first->only_if<NonTerminal>()) {
+        for (auto&& entry : mapref)
+        {
+            if (auto ptr = entry.first->only_if<NonTerminal>())
+            {
                 buf += name;
                 buf += "(";
                 buf += ptr->name;
                 buf += ") = { ";
-                for (auto t : *entry.second) {
+                for (auto t : *entry.second)
+                {
                     buf += t->name;
                     buf += ' ';
                 }
@@ -1210,9 +1224,9 @@ void compute_first_sets(const ProductionList& prods)
     TopDownParsingSets parsing_sets { normprods };
     parsing_sets.compute();
     printf("%s%s%s",
-        parsing_sets.epsilon_set_text().c_str(),
-        parsing_sets.predict_set_text().c_str(),
-        parsing_sets.follow_set_text().c_str());
+           parsing_sets.epsilon_set_text().c_str(),
+           parsing_sets.predict_set_text().c_str(),
+           parsing_sets.follow_set_text().c_str());
 }
 
 int usage(const char* pname)
@@ -1223,12 +1237,16 @@ int usage(const char* pname)
 
 int main(int argc, char* argv[])
 {
-    if (argc < 2)
-        exit(usage(argv[0]));
-    try {
+    if (argc < 2) exit(usage(argv[0]));
+    try
+    {
         // test_lexer(fp);
         compute_first_sets(read_grammar(argv[1]));
-    } catch (Bad_token_error) {
-    } catch (Syntax_error) {
+    }
+    catch (Bad_token_error)
+    {
+    }
+    catch (Syntax_error)
+    {
     }
 }
