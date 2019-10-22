@@ -266,12 +266,16 @@ enum class ItemKind
 struct Item abstract
 {
     ItemKind kind_;
-    Item(ItemKind k)
+    std::string name_;
+
+    Item(ItemKind k, const std::string& name)
         : kind_ { k }
+        , name_ {name}
     {
     }
 
     ItemKind kind() const { return kind_; }
+    const std::string& name() const { return name_; }
 
     virtual ~Item() = 0 {}
 
@@ -301,10 +305,8 @@ using ItemList = std::vector<Item*>;
 // Type representing a single terminal. E.g, "foo" that is to be matched exactly.
 struct Terminal : Item
 {
-    std::string name; // Also the value.
     Terminal(const std::string& n)
-        : Item { ItemKind::terminal }
-        , name { n }
+        : Item { ItemKind::terminal, n }
     {
     }
 };
@@ -313,7 +315,7 @@ struct Terminal : Item
 struct Epsilon : Item
 {
     Epsilon()
-        : Item { ItemKind::epsilon }
+        : Item { ItemKind::epsilon, "ε" }
     {
     }
 };
@@ -321,10 +323,8 @@ struct Epsilon : Item
 // Type representing a non-terminal, which appears on the LHS of productions.
 struct NonTerminal : Item
 {
-    std::string name; // Name of the non-terminal.
     NonTerminal(const std::string& n)
-        : Item { ItemKind::nonterminal }
-        , name { n }
+        : Item { ItemKind::nonterminal, n }
     {
     }
 };
@@ -333,7 +333,7 @@ struct NonTerminal : Item
 struct ItemSequence : Item
 {
     ItemSequence()
-        : Item { ItemKind::sequence }
+        : Item { ItemKind::sequence, "<item-sequence>" }
     {
     }
     ItemList sequence;
@@ -344,7 +344,7 @@ struct ItemSequence : Item
 struct Alternatives : Item
 {
     Alternatives()
-        : Item { ItemKind::alternatives }
+        : Item { ItemKind::alternatives, "<alternatives>" }
     {
     }
     ItemList alternatives;
@@ -361,7 +361,7 @@ struct GroupedItemSequence : Item
 public:
     Tok group_kind() const { return group_kind_; }
     GroupedItemSequence(Tok t)
-        : Item { ItemKind::grouped_sequence }
+        : Item { ItemKind::grouped_sequence, "<grouped-item-sequence>" }
         , group_kind_ { t }
     {
         assert(t == Tok::lbrace || t == Tok::lbrack || t == Tok::lparen);
@@ -612,14 +612,14 @@ public:
             buf += grouped_item_sequence_text(proditem->as<GroupedItemSequence>());
             break;
         case ItemKind::nonterminal:
-            buf += proditem->as<NonTerminal>()->name;
+            buf += proditem->as<NonTerminal>()->name();
             buf += ' ';
             break;
         case ItemKind::sequence:
             buf += production_item_seq_text(proditem->as<ItemSequence>());
             break;
         case ItemKind::terminal:
-            buf += proditem->as<Terminal>()->name;
+            buf += proditem->as<Terminal>()->name();
             buf += ' ';
             break;
         }
@@ -667,7 +667,7 @@ public:
         std::string buf;
         for (auto prod : prods)
         {
-            buf += prod->lhs()->name;
+            buf += prod->lhs()->name();
             buf += ' ';
             buf += ':';
             buf += ' ';
@@ -681,7 +681,7 @@ public:
         std::string buf;
         for (auto prod : prods)
         {
-            buf += prod->lhs()->name;
+            buf += prod->lhs()->name();
             buf += ' ';
             buf += ':';
             buf += ' ';
@@ -695,6 +695,9 @@ public:
 // Given a production without alternatives (it may not be completely normalized yet), find all
 // the places where {} [] or () occur and return all such grouped clauses and their indices in
 // the ItemSequence. If an epsilon is on the RHS, it will be the only item.
+//
+// E.g., A -> B C D { E F } G [H I] will return std::pair<first={E F} [H I], second=0, 5>
+// 
 std::pair<ItemList, std::vector<unsigned>>
 find_sequence_or_optional_clause(const NormalizedProduction* prod)
 {
@@ -716,10 +719,11 @@ find_sequence_or_optional_clause(const NormalizedProduction* prod)
     return { clauses, locations };
 }
 
+// Replace grouped clauses in productions by invented non-terminals. Return the new production and the
+// list of invented non-terminals. E.g., for the above example, we shall return
+//    std::pair<first=B C D N1 G N2, second=N1, N2>
 std::pair<ItemList, std::vector<NonTerminal*>>
-replace_sequence_or_optional_clauses(const Item*                  rhs,
-                                     const std::vector<unsigned>& locations,
-                                     unsigned                     name_seq)
+replace_grouped_clauses(const Item* rhs, const std::vector<unsigned>& locations, unsigned name_seq)
 {
     if (locations.size() == 0) return { {}, {} };
     ItemList                  itemseq;
@@ -745,6 +749,13 @@ replace_sequence_or_optional_clauses(const Item*                  rhs,
     return { std::move(itemseq), std::move(invented_nonterminals) };
 }
 
+// Add new productions for the invented nonterminals. E.g., for the above example, we shall
+// return with
+//      prod_accum=
+//              N1 -> EPSILON
+//              N1 -> B C N1
+//              N2 -> EPSILON
+//              N2 -> H I
 void generate_invented_productions(const std::vector<NonTerminal*>& nt_list,
                                    const ItemList&                  seq_clause_list,
                                    NormalizedProductionList&        prod_accum)
@@ -817,7 +828,7 @@ void remove_alternatives(const NormalizedProductionList& prodlist, NormalizedPro
     {
         if (Debug)
             printf("*** removing alternatives for %s -> %s\n",
-                   prod->lhs()->name.c_str(),
+                   prod->lhs()->name().c_str(),
                    Parser::production_item_text(prod->rhs()).c_str());
 
         if (prod->rhs()->is<Alternatives>())
@@ -854,6 +865,11 @@ void remove_alternatives(const NormalizedProductionList& prodlist, NormalizedPro
     }
 }
 
+// Given the read-in list of productions in EBNF form, normalize the productions
+// to BNF form where,
+//      - No production alternatives
+//      - No production has () [] or {} forms
+//      - Only right recursion is used.
 NormalizedProductionList normalize(const ProductionList& prodlist)
 {
     NormalizedProductionList result;
@@ -910,7 +926,7 @@ NormalizedProductionList normalize(const ProductionList& prodlist)
             auto [clause_items, locations] = find_sequence_or_optional_clause(normprod);
             assert(clause_items.size() == locations.size());
             auto [new_seq, invented_nonterminals]
-                = replace_sequence_or_optional_clauses(normprod->rhs(), locations, name_seq);
+                = replace_grouped_clauses(normprod->rhs(), locations, name_seq);
             if (invented_nonterminals.size() > 0)
             {
                 auto new_item_seq      = new ItemSequence;
@@ -935,6 +951,7 @@ NormalizedProductionList normalize(const ProductionList& prodlist)
     return result;
 }
 
+// Read in the grammar file and return the list of productions.
 ProductionList read_grammar(const char* fname)
 {
     FILE* fp = fopen(fname, "r");
@@ -949,40 +966,16 @@ ProductionList read_grammar(const char* fname)
     return p.productions();
 }
 
+// Comparsion for Item. We compare simply by name.
 struct CmpItem
 {
-    bool operator()(const Item* lhs, const Item* rhs) const
-    {
-        assert(lhs->kind() == ItemKind::terminal || lhs->kind() == ItemKind::nonterminal);
-        assert(rhs->kind() == ItemKind::terminal || rhs->kind() == ItemKind::nonterminal);
-        auto&& lhs_name = lhs->kind() == ItemKind::terminal ? lhs->as<Terminal>()->name
-                                                            : lhs->as<NonTerminal>()->name;
-        auto&& rhs_name = rhs->kind() == ItemKind::terminal ? rhs->as<Terminal>()->name
-                                                            : rhs->as<NonTerminal>()->name;
-        return lhs_name < rhs_name;
-    }
-};
-
-struct CmpTerminal
-{
-    bool operator()(const Terminal* lhs, const Terminal* rhs) const
-    {
-        return lhs->name < rhs->name;
-    }
-};
-
-struct CmpNonTerminal
-{
-    bool operator()(const NonTerminal* lhs, const NonTerminal* rhs) const
-    {
-        return lhs->name < rhs->name;
-    }
+    bool operator()(const Item* lhs, const Item* rhs) const { return lhs->name() < rhs->name();   }
 };
 
 // Type representing function from terminal/non-terminals -> set of terminals, used in computing
 // FIRST and FOLLOW
-using TerminalSet          = std::set<const Terminal*, CmpTerminal>;
-using NonTerminalSet       = std::set<const NonTerminal*, CmpNonTerminal>;
+using TerminalSet          = std::set<const Terminal*, CmpItem>;
+using NonTerminalSet       = std::set<const NonTerminal*, CmpItem>;
 using ItemToTerminalSetMap = std::map<const Item*, TerminalSet*, CmpItem>;
 
 struct TopDownParsingSets
@@ -1178,7 +1171,7 @@ struct TopDownParsingSets
         std::string buf = "EPSILON = {\n";
         for (auto nt : epsilon_)
         {
-            buf += nt->name;
+            buf += nt->name();
             buf += ",\n";
         }
         buf += "}\n";
@@ -1194,11 +1187,11 @@ struct TopDownParsingSets
             {
                 buf += name;
                 buf += "(";
-                buf += ptr->name;
+                buf += ptr->name();
                 buf += ") = { ";
                 for (auto t : *entry.second)
                 {
-                    buf += t->name;
+                    buf += t->name();
                     buf += ' ';
                 }
                 buf += "}\n";
