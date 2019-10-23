@@ -4,6 +4,8 @@ static constexpr bool Debug = false;
 
 using namespace std::string_literals;
 
+const char* grammar_file_name;
+
 enum struct Tok
 {
     none,
@@ -265,16 +267,16 @@ enum class ItemKind
 
 struct Item
 {
-    ItemKind kind_;
+    ItemKind    kind_;
     std::string name_;
 
     Item(ItemKind k, const std::string& name)
         : kind_ { k }
-        , name_ {name}
+        , name_ { name }
     {
     }
 
-    ItemKind kind() const { return kind_; }
+    ItemKind           kind() const { return kind_; }
     const std::string& name() const { return name_; }
 
     virtual ~Item() {}
@@ -369,15 +371,34 @@ public:
     Item* contents; // Can be any arbitrary construct.
 };
 
+struct Location
+{
+    size_t line_ = 0;
+
+    size_t line() const { return line_; }
+
+    Location() = default;
+
+    static constexpr size_t none = 0xffffffff;
+
+    Location(size_t l)
+        : line_ { l }
+    {
+        assert(l != 0 && "line numbers begin with 1");
+    }
+};
+
 // Type representing a production. "rhs" can be Epsilon, ItemSequence or Alternatives.
 struct Production
 {
     NonTerminal* lhs_ = nullptr;
     Item*        rhs_ = nullptr;
+    Location     loc_;
 
-    Production(NonTerminal* lhs, Item* rhs)
+    Production(NonTerminal* lhs, Item* rhs, const Location& loc)
         : lhs_ { lhs }
         , rhs_ { rhs }
+        , loc_ { loc }
     {
     }
 
@@ -385,6 +406,8 @@ struct Production
     const NonTerminal* lhs() const { return lhs_; }
     Item*              rhs() { return rhs_; }
     const Item*        rhs() const { return rhs_; }
+
+    const Location& location() const { return loc_; }
 
     void set_rhs(Item* item)
     {
@@ -399,9 +422,11 @@ struct NormalizedProduction
 {
     NonTerminal* lhs_ = nullptr;
     Item*        rhs_ = nullptr;
+    Location     loc_;
 
-    NormalizedProduction(NonTerminal* lhs)
+    NormalizedProduction(NonTerminal* lhs, const Location& loc)
         : lhs_ { lhs }
+        , loc_ { loc }
     {
         assert(lhs_->is<NonTerminal>());
     }
@@ -411,6 +436,7 @@ struct NormalizedProduction
     const NonTerminal* lhs() const { return lhs_; }
     NonTerminal*       lhs() { return lhs_; }
     void               set_rhs(Item* item) { rhs_ = item; }
+    const Location&    location() const { return loc_; }
 };
 
 // Type representing a list of productions in the grammar.
@@ -419,18 +445,16 @@ using ProductionList = std::vector<Production*>;
 // Type representing a list of normalized production.
 using NormalizedProductionList = std::vector<NormalizedProduction*>;
 
-
 // Comparsion for Item. We compare simply by name.
 struct CmpItem
 {
-    bool operator()(const Item* lhs, const Item* rhs) const { return lhs->name() < rhs->name();   }
+    bool operator()(const Item* lhs, const Item* rhs) const { return lhs->name() < rhs->name(); }
 };
 // Type representing function from terminal/non-terminals -> set of terminals, used in computing
 // FIRST and FOLLOW
 using TerminalSet          = std::set<const Terminal*, CmpItem>;
 using NonTerminalSet       = std::set<const NonTerminal*, CmpItem>;
 using ItemToTerminalSetMap = std::map<const Item*, TerminalSet*, CmpItem>;
-
 
 // Grammar parser. Parses productions and stores them in EBNF form. Then simplifies them
 // to simple CFG on request.
@@ -573,11 +597,12 @@ public:
     {
         auto nonterm
             = scn_.token() == Tok::id ? scn_.identifier() : ""; // guard against erroneous input
+        auto line = scn_.lineno();
         require(Tok::id);
         require(Tok::colon);
         auto altlist = scan_alternatives();
         require(Tok::semi);
-        return new Production { new NonTerminal { nonterm }, altlist };
+        return new Production { new NonTerminal { nonterm }, altlist, Location { line } };
     }
 
     void parse()
@@ -710,7 +735,7 @@ public:
 // the ItemSequence. If an epsilon is on the RHS, it will be the only item.
 //
 // E.g., A -> B C D { E F } G [H I] will return std::pair<first={E F} [H I], second=0, 5>
-// 
+//
 std::pair<ItemList, std::vector<unsigned>>
 find_sequence_or_optional_clause(const NormalizedProduction* prod)
 {
@@ -732,8 +757,8 @@ find_sequence_or_optional_clause(const NormalizedProduction* prod)
     return { clauses, locations };
 }
 
-// Replace grouped clauses in productions by invented non-terminals. Return the new production and the
-// list of invented non-terminals. E.g., for the above example, we shall return
+// Replace grouped clauses in productions by invented non-terminals. Return the new production
+// and the list of invented non-terminals. E.g., for the above example, we shall return
 //    std::pair<first=B C D N1 G N2, second=N1, N2>
 std::pair<ItemList, std::vector<NonTerminal*>>
 replace_grouped_clauses(const Item* rhs, const std::vector<unsigned>& locations, unsigned name_seq)
@@ -785,7 +810,7 @@ void generate_invented_productions(const std::vector<NonTerminal*>& nt_list,
         case Tok::lparen:
         {
 
-            auto newprod = new NormalizedProduction { nt_list[clause_index] };
+            auto newprod = new NormalizedProduction { nt_list[clause_index], Location::none };
             newprod->set_rhs(group_clause->contents);
             prod_accum.push_back(newprod);
             break;
@@ -794,10 +819,10 @@ void generate_invented_productions(const std::vector<NonTerminal*>& nt_list,
         {
             // Add  N_k -> EPSILON
             //      N_k -> <seq>
-            auto newprod = new NormalizedProduction { nt_list[clause_index] };
+            auto newprod = new NormalizedProduction { nt_list[clause_index], Location::none };
             newprod->set_rhs(new Epsilon);
             prod_accum.push_back(newprod);
-            newprod = new NormalizedProduction { nt_list[clause_index] };
+            newprod = new NormalizedProduction { nt_list[clause_index], Location::none };
             newprod->set_rhs(group_clause->contents);
             prod_accum.push_back(newprod);
             break;
@@ -806,10 +831,10 @@ void generate_invented_productions(const std::vector<NonTerminal*>& nt_list,
         {
             // Add  N_k -> EPSILON
             //      N_k -> <seq> N_k
-            auto newprod = new NormalizedProduction { nt_list[clause_index] };
+            auto newprod = new NormalizedProduction { nt_list[clause_index], Location::none };
             newprod->set_rhs(new Epsilon);
             prod_accum.push_back(newprod);
-            newprod  = new NormalizedProduction { nt_list[clause_index] };
+            newprod  = new NormalizedProduction { nt_list[clause_index], Location::none };
             auto seq = new ItemSequence;
             if (auto gcseq = group_clause->contents->only_if<ItemSequence>())
             {
@@ -850,7 +875,7 @@ void remove_alternatives(const NormalizedProductionList& prodlist, NormalizedPro
             auto alternatives = prod->rhs()->as<Alternatives>()->alternatives;
             for (auto i = 0U; i < alternatives.size(); ++i)
             {
-                auto nprod = new NormalizedProduction { prod->lhs() };
+                auto nprod = new NormalizedProduction { prod->lhs(), prod->location() };
                 if (alternatives[i]->is<ItemSequence>() || alternatives[i]->is<Epsilon>())
                 { nprod->set_rhs(alternatives[i]); }
                 else
@@ -864,7 +889,7 @@ void remove_alternatives(const NormalizedProductionList& prodlist, NormalizedPro
         }
         else
         {
-            auto nprod = new NormalizedProduction { prod->lhs() };
+            auto nprod = new NormalizedProduction { prod->lhs(), prod->location() };
             if (prod->rhs()->is<ItemSequence>() || prod->rhs()->is<Epsilon>())
             { nprod->set_rhs(prod->rhs()); }
             else
@@ -890,7 +915,7 @@ NormalizedProductionList normalize(const ProductionList& prodlist)
 
     for (auto& orig_prod : prodlist)
     {
-        auto nprod = new NormalizedProduction { orig_prod->lhs() };
+        auto nprod = new NormalizedProduction { orig_prod->lhs(), orig_prod->location() };
         nprod->set_rhs(orig_prod->rhs());
         result.push_back(nprod);
     }
@@ -928,10 +953,10 @@ NormalizedProductionList normalize(const ProductionList& prodlist)
         // can be converted to
         //      A -> <alpha> N <gamma>
         //      N -> <beta>
-        // For each sequence-or-optional-clause on the RHS we replace by invented non-terminals and
-        // for each such non-terminal add the above productions. Since <beta> in the above cases
-        // itself can contain an alternative clause, we need to do this iteratively till there are
-        // no such clauses left.
+        // For each sequence-or-optional-clause on the RHS we replace by invented non-terminals
+        // and for each such non-terminal add the above productions. Since <beta> in the above
+        // cases itself can contain an alternative clause, we need to do this iteratively till
+        // there are no such clauses left.
         NormalizedProductionList invented_productions;
         for (auto normprod : result)
         {
@@ -959,28 +984,39 @@ NormalizedProductionList normalize(const ProductionList& prodlist)
     }
 
     // Final checks.
-    for (auto prod : result) { assert(prod->rhs()->is<Epsilon>() || prod->rhs()->is<ItemSequence>()); }
+    for (auto prod : result)
+    { assert(prod->rhs()->is<Epsilon>() || prod->rhs()->is<ItemSequence>()); }
 
     return result;
 }
 
 void find_undefined_names(const NormalizedProductionList& prodlist)
 {
-    NonTerminalSet lhs_set;
-    for (auto prod : prodlist)
-        lhs_set.insert(prod->lhs());
+    using Entry = std::pair<const NonTerminal*, Location>;
+    struct Cmp
+    {
+        bool operator()(const Entry& lhs, const Entry& rhs) const
+        {
+            return lhs.first->name() < rhs.first->name();
+        }
+    };
 
-    NonTerminalSet all_names;
-    for (auto prod: prodlist)
+    using Set = std::set<Entry, Cmp>;
+
+    Set lhs_set;
+    for (auto prod : prodlist) lhs_set.insert({ prod->lhs(), prod->location() });
+
+    Set all_names;
+    for (auto prod : prodlist)
         if (auto rhs = prod->rhs()->only_if<ItemSequence>())
             for (auto item : rhs->sequence)
                 if (auto nt = item->only_if<NonTerminal>())
-                    all_names.insert(nt);
+                    all_names.insert({ nt, prod->location() });
 
     if (lhs_set.size() != all_names.size())
-        for (auto name : all_names)
-            if (lhs_set.find(name) == lhs_set.end())
-                printf("error: name %s is undefined\n", name->name().c_str());
+        for (auto entry : all_names)
+            if (lhs_set.find(entry) == lhs_set.end())
+                printf("%s(%d): error: name %s is undefined\n", grammar_file_name, entry.second.line(), entry.first->name().c_str());
 }
 
 // Read in the grammar file and return the list of productions.
@@ -992,6 +1028,7 @@ ProductionList read_grammar(const char* fname)
         perror(("can't open: "s + fname).c_str());
         exit(2);
     }
+    grammar_file_name = fname;
     Scanner scn { fp, fname };
     Parser  p { scn };
     p.parse();
@@ -1028,7 +1065,8 @@ struct TopDownParsingSets
     }
     // EPSILON contains:
     //  - Any non-terminal that has an epsilon production
-    //  - Any non-terminal that has a production containing only non-terminals that are in EPSILON
+    //  - Any non-terminal that has a production containing only non-terminals that are
+    //  in EPSILON
     void do_epsilon()
     {
         for (auto&& P : prods_)

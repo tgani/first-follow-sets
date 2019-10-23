@@ -1,9 +1,9 @@
-function-decl:
-    "func" "ID" "(" [ param-list ] ")" [ return-type ]
-	;
-        
 program:
-        { decl }
+        decls
+	;
+
+decls:
+	{ decls }
 	;
 
 decl:
@@ -15,6 +15,9 @@ function-definition:
     function-decl block
 	;
 
+function-decl:
+    "func" "ID" "(" [ param-list ] ")" [ return-type ]
+	;
 
 param-list:
         "ID" type { "," "ID" type }
@@ -22,6 +25,10 @@ param-list:
 
 block:
     "{" decls stmts "}"
+	;
+
+return-type:
+	type
 	;
 
 type:
@@ -49,7 +56,7 @@ stmt:
 	;
 
 lvalue:
-        IDENT { "[" expression "]" }
+        "IDENT" { "[" expression "]" }
 	;
 
 basic-stmt:
