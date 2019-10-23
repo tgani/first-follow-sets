@@ -773,7 +773,7 @@ void generate_invented_productions(const std::vector<NonTerminal*>& nt_list,
                                    const ItemList&                  seq_clause_list,
                                    NormalizedProductionList&        prod_accum)
 {
-    unsigned i = 0;
+    unsigned clause_index = 0;
     assert(nt_list.size() == seq_clause_list.size());
     for (auto& item : seq_clause_list)
     {
@@ -785,7 +785,7 @@ void generate_invented_productions(const std::vector<NonTerminal*>& nt_list,
         case Tok::lparen:
         {
 
-            auto newprod = new NormalizedProduction { nt_list[i] };
+            auto newprod = new NormalizedProduction { nt_list[clause_index] };
             newprod->set_rhs(group_clause->contents);
             prod_accum.push_back(newprod);
             break;
@@ -794,10 +794,10 @@ void generate_invented_productions(const std::vector<NonTerminal*>& nt_list,
         {
             // Add  N_k -> EPSILON
             //      N_k -> <seq>
-            auto newprod = new NormalizedProduction { nt_list[i] };
+            auto newprod = new NormalizedProduction { nt_list[clause_index] };
             newprod->set_rhs(new Epsilon);
             prod_accum.push_back(newprod);
-            newprod = new NormalizedProduction { nt_list[i] };
+            newprod = new NormalizedProduction { nt_list[clause_index] };
             newprod->set_rhs(group_clause->contents);
             prod_accum.push_back(newprod);
             break;
@@ -806,10 +806,10 @@ void generate_invented_productions(const std::vector<NonTerminal*>& nt_list,
         {
             // Add  N_k -> EPSILON
             //      N_k -> <seq> N_k
-            auto newprod = new NormalizedProduction { nt_list[i] };
+            auto newprod = new NormalizedProduction { nt_list[clause_index] };
             newprod->set_rhs(new Epsilon);
             prod_accum.push_back(newprod);
-            newprod  = new NormalizedProduction { nt_list[i] };
+            newprod  = new NormalizedProduction { nt_list[clause_index] };
             auto seq = new ItemSequence;
             if (auto gcseq = group_clause->contents->only_if<ItemSequence>())
             {
@@ -819,13 +819,14 @@ void generate_invented_productions(const std::vector<NonTerminal*>& nt_list,
             {
                 seq->sequence.push_back(group_clause->contents);
             }
-            seq->sequence.push_back(nt_list[i]);
+            seq->sequence.push_back(nt_list[clause_index]);
             newprod->set_rhs(seq);
             prod_accum.push_back(newprod);
             break;
         }
         default: assert(false && "unreached");
         }
+        ++clause_index;
     }
 }
 // convert A: a1| a2 | ... aN to
