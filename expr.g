@@ -1,3 +1,7 @@
+function-decl:
+    "func" "ID" "(" [ param-list ] ")" [ return-type ]
+	;
+        
 program:
         { decl }
 	;
@@ -11,9 +15,6 @@ function-definition:
     function-decl block
 	;
 
-function-decl:
-    "func" "ID" "(" [ param-list ] ")" [ return-type ]
-	;
 
 param-list:
         "ID" type { "," "ID" type }
@@ -37,7 +38,7 @@ stmts:
 	 ;
 
 stmt:
-        basic_statement
+        basic-stmt
     |   "if" "(" expression ")" stmt
     |   "if" "(" expression ")" stmt "else" stmt
     |   "while" "(" expression ")" stmt

@@ -263,7 +263,7 @@ enum class ItemKind
     grouped_sequence
 };
 
-struct Item abstract
+struct Item
 {
     ItemKind kind_;
     std::string name_;
@@ -277,7 +277,7 @@ struct Item abstract
     ItemKind kind() const { return kind_; }
     const std::string& name() const { return name_; }
 
-    virtual ~Item() = 0 {}
+    virtual ~Item() {}
 
     template <typename T> T* as()
     {
@@ -418,6 +418,19 @@ using ProductionList = std::vector<Production*>;
 
 // Type representing a list of normalized production.
 using NormalizedProductionList = std::vector<NormalizedProduction*>;
+
+
+// Comparsion for Item. We compare simply by name.
+struct CmpItem
+{
+    bool operator()(const Item* lhs, const Item* rhs) const { return lhs->name() < rhs->name();   }
+};
+// Type representing function from terminal/non-terminals -> set of terminals, used in computing
+// FIRST and FOLLOW
+using TerminalSet          = std::set<const Terminal*, CmpItem>;
+using NonTerminalSet       = std::set<const NonTerminal*, CmpItem>;
+using ItemToTerminalSetMap = std::map<const Item*, TerminalSet*, CmpItem>;
+
 
 // Grammar parser. Parses productions and stores them in EBNF form. Then simplifies them
 // to simple CFG on request.
@@ -944,11 +957,29 @@ NormalizedProductionList normalize(const ProductionList& prodlist)
                    Parser::productions_text(result).c_str());
     }
 
-    // Final check.
-    for (auto prod : result)
-    { assert(prod->rhs()->is<Epsilon>() || prod->rhs()->is<ItemSequence>()); }
+    // Final checks.
+    for (auto prod : result) { assert(prod->rhs()->is<Epsilon>() || prod->rhs()->is<ItemSequence>()); }
 
     return result;
+}
+
+void find_undefined_names(const NormalizedProductionList& prodlist)
+{
+    NonTerminalSet lhs_set;
+    for (auto prod : prodlist)
+        lhs_set.insert(prod->lhs());
+
+    NonTerminalSet all_names;
+    for (auto prod: prodlist)
+        if (auto rhs = prod->rhs()->only_if<ItemSequence>())
+            for (auto item : rhs->sequence)
+                if (auto nt = item->only_if<NonTerminal>())
+                    all_names.insert(nt);
+
+    if (lhs_set.size() != all_names.size())
+        for (auto name : all_names)
+            if (lhs_set.find(name) == lhs_set.end())
+                printf("error: name %s is undefined\n", name->name().c_str());
 }
 
 // Read in the grammar file and return the list of productions.
@@ -965,18 +996,6 @@ ProductionList read_grammar(const char* fname)
     p.parse();
     return p.productions();
 }
-
-// Comparsion for Item. We compare simply by name.
-struct CmpItem
-{
-    bool operator()(const Item* lhs, const Item* rhs) const { return lhs->name() < rhs->name();   }
-};
-
-// Type representing function from terminal/non-terminals -> set of terminals, used in computing
-// FIRST and FOLLOW
-using TerminalSet          = std::set<const Terminal*, CmpItem>;
-using NonTerminalSet       = std::set<const NonTerminal*, CmpItem>;
-using ItemToTerminalSetMap = std::map<const Item*, TerminalSet*, CmpItem>;
 
 struct TopDownParsingSets
 {
@@ -1220,6 +1239,7 @@ void compute_first_sets(const ProductionList& prods)
            parsing_sets.epsilon_set_text().c_str(),
            parsing_sets.predict_set_text().c_str(),
            parsing_sets.follow_set_text().c_str());
+    find_undefined_names(normprods);
 }
 
 int usage(const char* pname)
