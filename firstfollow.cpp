@@ -4,7 +4,12 @@ static constexpr bool Debug = false;
 
 using namespace std::string_literals;
 
+// Global values set by options
 const char* grammar_file_name;
+bool        dump_normalized_grammar;
+bool        dump_epsilon_sets;
+bool        dump_first_sets;
+bool        dump_follow_sets;
 
 enum struct Tok
 {
@@ -968,7 +973,8 @@ bool check_productions(const NormalizedProductionList& prodlist)
     for (auto prod : prodlist)
         if (visited_set.find(prod) == visited_set.end())
         {
-            if (prod->location().line() != Location::none) // invented nonterms have this line number
+            if (prod->location().line()
+                != Location::none) // invented nonterms have this line number
                 printf("%s(%zu): warning: unreachable production '%s'\n",
                        grammar_file_name,
                        prod->location().line(),
@@ -1075,7 +1081,6 @@ ProductionList read_grammar(const char* fname)
         perror(("can't open: "s + fname).c_str());
         exit(2);
     }
-    grammar_file_name = fname;
     Scanner scn { fp, fname };
     Parser  p { scn };
     p.parse();
@@ -1313,25 +1318,49 @@ struct TopDownParsingSets
 void compute_first_sets(const ProductionList& prods)
 {
     printf("%lu productions\n", prods.size());
-    printf("%s\n", Parser::productions_text(prods).c_str());
-    printf("after normalizing:\n");
+    if (Debug) printf("%s\n", Parser::productions_text(prods).c_str());
     auto [normprods, success] = normalize(prods);
     if (!success) return;
-    printf("%lu productions\n", normprods.size());
-    printf("%s\n", Parser::productions_text(normprods).c_str());
-
+    if (dump_normalized_grammar)
+    {
+        printf("after normalizing:\n");
+        printf("%lu productions\n", normprods.size());
+        printf("%s\n", Parser::productions_text(normprods).c_str());
+    }
     TopDownParsingSets parsing_sets { normprods };
     parsing_sets.compute();
-    printf("%s%s%s",
-           parsing_sets.epsilon_set_text().c_str(),
-           parsing_sets.predict_set_text().c_str(),
-           parsing_sets.follow_set_text().c_str());
+    if (dump_epsilon_sets) printf("%s", parsing_sets.epsilon_set_text().c_str());
+    if (dump_first_sets) printf("%s", parsing_sets.predict_set_text().c_str());
+    if (dump_follow_sets) printf("%s", parsing_sets.follow_set_text().c_str());
 }
 
 int usage(const char* pname)
 {
-    fprintf(stderr, "usage: %s GRAMMAR-FILE\n", pname);
+    fprintf(stderr, "usage: %s [--normalized] [--predict] [--follow] [--all] GRAMMAR-FILE\n", pname);
     return 2;
+}
+
+void opts(int argc, char* argv[])
+{
+    for (int i = 1; i < argc; ++i)
+    {
+        if ("--normalized"s == argv[i])
+            dump_normalized_grammar = true;
+        else if ("--epsilon"s == argv[i])
+            dump_epsilon_sets = true;
+        else if ("--predict"s == argv[i])
+            dump_first_sets = true;
+        else if ("--follow"s == argv[i])
+            dump_follow_sets = true;
+        else if ("--all"s == argv[i])
+        {
+            dump_normalized_grammar = dump_epsilon_sets = dump_first_sets = dump_follow_sets = true;
+        }
+        else if (grammar_file_name != nullptr)
+            exit(usage(argv[0]));
+        else
+            grammar_file_name = argv[i];
+    }
 }
 
 int main(int argc, char* argv[])
@@ -1339,8 +1368,8 @@ int main(int argc, char* argv[])
     if (argc < 2) exit(usage(argv[0]));
     try
     {
-        // test_lexer(fp);
-        compute_first_sets(read_grammar(argv[1]));
+        opts(argc, argv);
+        compute_first_sets(read_grammar(grammar_file_name));
     }
     catch (Bad_token_error)
     {
