@@ -331,10 +331,6 @@ struct NonTerminal : Item
         : Item { ItemKind::nonterminal, n }
     {
     }
-    const NormalizedProduction* prod_ = nullptr;
-
-    const NormalizedProduction* production() const { return prod_; }
-    void                        set_production(const NormalizedProduction* prod) { prod_ = prod; }
 };
 
 // Type representing a sequence of "items" in a single production rule.
@@ -942,7 +938,7 @@ void walk_productions(const NormalizedProduction*    prod,
 
 // Check for undefined names and unreachable productions. Return false iff any such cases are found
 // and issue appropriate error messages.
-bool link_non_terminals_to_productions(const NormalizedProductionList& prodlist)
+bool check_productions(const NormalizedProductionList& prodlist)
 {
     // Map of non-terminals to their productions.
     std::multimap<const NonTerminal*, const NormalizedProduction*, CmpItem> prodmap;
@@ -952,7 +948,8 @@ bool link_non_terminals_to_productions(const NormalizedProductionList& prodlist)
 
     bool result = true;
 
-    // Pass 2: Go through all productions and look up non-terminals and set their production links.
+    // Pass 2: Go through all productions and look up non-terminals; diagnose ones for
+    // where there are no productions.
     for (auto prod : prodlist)
     {
         if (prod->rhs()->is<Epsilon>()) continue;
@@ -962,9 +959,7 @@ bool link_non_terminals_to_productions(const NormalizedProductionList& prodlist)
             {
                 // Find the production for the non-terminal; there might be multiple but we record
                 // only one in the map above since we compare by name.
-                if (auto iter = prodmap.find(nt); iter != prodmap.end())
-                { nt->set_production(iter->second); }
-                else
+                if (auto iter = prodmap.find(nt); iter == prodmap.end())
                 {
                     printf("%s(%d): error: undefined name '%s'\n",
                            grammar_file_name,
@@ -975,6 +970,8 @@ bool link_non_terminals_to_productions(const NormalizedProductionList& prodlist)
             }
         }
     }
+    // Step 3. Starting from the first production symbol, recursively walk the productions
+    // and diagnose productions which are not reached.
     NormalizedProductionSet visited_set;
     walk_productions(prodlist[0], prodmap, visited_set);
     for (auto prod : prodlist)
@@ -1072,7 +1069,7 @@ std::pair<NormalizedProductionList, bool> normalize(const ProductionList& prodli
     for (auto prod : result)
     { assert(prod->rhs()->is<Epsilon>() || prod->rhs()->is<ItemSequence>()); }
 
-    if (!link_non_terminals_to_productions(result)) return { result, false };
+    if (!check_productions(result)) return { result, false };
 
     return { result, true };
 }
