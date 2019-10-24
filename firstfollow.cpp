@@ -921,20 +921,14 @@ void walk_productions(const NormalizedProduction*    prod,
     if (visited.find(prod) != visited.end()) return;
     visited.insert(prod);
     if (auto itemseq = prod->rhs()->only_if<ItemSequence>())
-    {
         for (auto item : itemseq->sequence)
-        {
             if (auto nt = item->only_if<NonTerminal>())
-            {
                 if (auto iter = prodmap.find(nt); iter != prodmap.end())
                     while (iter != prodmap.end() && iter->first->name() == nt->name())
                     {
                         walk_productions(iter->second, prodmap, visited);
                         ++iter;
                     }
-            }
-        }
-    }
 }
 
 // Check for undefined names and unreachable productions. Return false iff any such cases are found
@@ -955,9 +949,7 @@ bool check_productions(const NormalizedProductionList& prodlist)
     {
         if (prod->rhs()->is<Epsilon>()) continue;
         for (auto item : prod->rhs()->as<ItemSequence>()->sequence)
-        {
             if (auto nt = item->only_if<NonTerminal>())
-            {
                 // Find the production for the non-terminal; there might be multiple but we record
                 // only one in the map above since we compare by name.
                 if (auto iter = prodmap.find(nt); iter == prodmap.end())
@@ -968,8 +960,6 @@ bool check_productions(const NormalizedProductionList& prodlist)
                            nt->name().c_str());
                     result = false;
                 }
-            }
-        }
     }
     // Step 3. Starting from the first production symbol, recursively walk the productions
     // and diagnose productions which are not reached.
