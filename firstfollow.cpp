@@ -909,13 +909,14 @@ void remove_alternatives(const NormalizedProductionList& prodlist, NormalizedPro
 using NormalizedProductionMap
     = std::multimap<const NonTerminal*, const NormalizedProduction*, CmpItem>;
 
-using NormalizedProductionSet = std::set<const NormalizedProduction*>;   // note: uses pointer comparison for keys.
+using NormalizedProductionSet
+    = std::set<const NormalizedProduction*>; // note: uses pointer comparison for keys.
 
 // Given a production, walk its non-terminals recursively recording all visited
 // productions in "visited_set".
 void walk_productions(const NormalizedProduction*    prod,
                       const NormalizedProductionMap& prodmap,
-                      NormalizedProductionSet&                   visited)
+                      NormalizedProductionSet&       visited)
 {
     if (visited.find(prod) != visited.end()) return;
     visited.insert(prod);
