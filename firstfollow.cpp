@@ -1065,8 +1065,6 @@ std::pair<NormalizedProductionList, bool> normalize(const ProductionList& prodli
     return { result, true };
 }
 
-void find_unreachable_names(const NormalizedProductionList& prodlist) {}
-
 // Read in the grammar file and return the list of productions.
 ProductionList read_grammar(const char* fname)
 {
