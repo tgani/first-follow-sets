@@ -1361,6 +1361,7 @@ void opts(int argc, char* argv[])
         else
             grammar_file_name = argv[i];
     }
+    if (grammar_file_name == nullptr) exit(usage(argv[0]));
 }
 
 int main(int argc, char* argv[])
