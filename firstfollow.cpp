@@ -954,7 +954,7 @@ bool check_productions(const NormalizedProductionList& prodlist)
                 // only one in the map above since we compare by name.
                 if (auto iter = prodmap.find(nt); iter == prodmap.end())
                 {
-                    printf("%s(%d): error: undefined name '%s'\n",
+                    printf("%s(%zu): error: undefined name '%s'\n",
                            grammar_file_name,
                            prod->location().line(),
                            nt->name().c_str());
@@ -968,7 +968,7 @@ bool check_productions(const NormalizedProductionList& prodlist)
     for (auto prod : prodlist)
         if (visited_set.find(prod) == visited_set.end())
         {
-            printf("%s(%d): warning: unreachable production '%s'\n",
+            printf("%s(%zu): warning: unreachable production '%s'\n",
                    grammar_file_name,
                    prod->location().line(),
                    prod->lhs()->name().c_str());
