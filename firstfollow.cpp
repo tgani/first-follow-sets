@@ -322,6 +322,8 @@ struct Epsilon : Item
     }
 };
 
+struct NormalizedProduction; // Forward decl.
+
 // Type representing a non-terminal, which appears on the LHS of productions.
 struct NonTerminal : Item
 {
@@ -329,6 +331,10 @@ struct NonTerminal : Item
         : Item { ItemKind::nonterminal, n }
     {
     }
+    const NormalizedProduction* prod_ = nullptr;
+
+    const NormalizedProduction* production() const { return prod_; }
+    void                        set_production(const NormalizedProduction* prod) { prod_ = prod; }
 };
 
 // Type representing a sequence of "items" in a single production rule.
@@ -904,12 +910,91 @@ void remove_alternatives(const NormalizedProductionList& prodlist, NormalizedPro
     }
 }
 
+using NormalizedProductionMap
+    = std::multimap<const NonTerminal*, const NormalizedProduction*, CmpItem>;
+
+using NormalizedProductionSet = std::set<const NormalizedProduction*>;   // note: uses pointer comparison for keys.
+
+// Given a production, walk its non-terminals recursively recording all visited
+// productions in "visited_set".
+void walk_productions(const NormalizedProduction*    prod,
+                      const NormalizedProductionMap& prodmap,
+                      NormalizedProductionSet&                   visited)
+{
+    if (visited.find(prod) != visited.end()) return;
+    visited.insert(prod);
+    if (auto itemseq = prod->rhs()->only_if<ItemSequence>())
+    {
+        for (auto item : itemseq->sequence)
+        {
+            if (auto nt = item->only_if<NonTerminal>())
+            {
+                if (auto iter = prodmap.find(nt); iter != prodmap.end())
+                    while (iter != prodmap.end() && iter->first->name() == nt->name())
+                    {
+                        walk_productions(iter->second, prodmap, visited);
+                        ++iter;
+                    }
+            }
+        }
+    }
+}
+
+// Check for undefined names and unreachable productions. Return false iff any such cases are found
+// and issue appropriate error messages.
+bool link_non_terminals_to_productions(const NormalizedProductionList& prodlist)
+{
+    // Map of non-terminals to their productions.
+    std::multimap<const NonTerminal*, const NormalizedProduction*, CmpItem> prodmap;
+
+    // Pass 1: Map non-terminals to their productions.
+    for (auto prod : prodlist) prodmap.emplace(prod->lhs(), prod);
+
+    bool result = true;
+
+    // Pass 2: Go through all productions and look up non-terminals and set their production links.
+    for (auto prod : prodlist)
+    {
+        if (prod->rhs()->is<Epsilon>()) continue;
+        for (auto item : prod->rhs()->as<ItemSequence>()->sequence)
+        {
+            if (auto nt = item->only_if<NonTerminal>())
+            {
+                // Find the production for the non-terminal; there might be multiple but we record
+                // only one in the map above since we compare by name.
+                if (auto iter = prodmap.find(nt); iter != prodmap.end())
+                { nt->set_production(iter->second); }
+                else
+                {
+                    printf("%s(%d): error: undefined name '%s'\n",
+                           grammar_file_name,
+                           prod->location().line(),
+                           nt->name().c_str());
+                    result = false;
+                }
+            }
+        }
+    }
+    NormalizedProductionSet visited_set;
+    walk_productions(prodlist[0], prodmap, visited_set);
+    for (auto prod : prodlist)
+        if (visited_set.find(prod) == visited_set.end())
+        {
+            printf("%s(%d): warning: unreachable production '%s'\n",
+                   grammar_file_name,
+                   prod->location().line(),
+                   prod->lhs()->name().c_str());
+        }
+    return result;
+}
+
 // Given the read-in list of productions in EBNF form, normalize the productions
 // to BNF form where,
 //      - No production alternatives
 //      - No production has () [] or {} forms
 //      - Only right recursion is used.
-NormalizedProductionList normalize(const ProductionList& prodlist)
+// Return pair<normalized-productions, flag> where flag is true iff no errors are detected.
+std::pair<NormalizedProductionList, bool> normalize(const ProductionList& prodlist)
 {
     NormalizedProductionList result;
 
@@ -987,37 +1072,12 @@ NormalizedProductionList normalize(const ProductionList& prodlist)
     for (auto prod : result)
     { assert(prod->rhs()->is<Epsilon>() || prod->rhs()->is<ItemSequence>()); }
 
-    return result;
+    if (!link_non_terminals_to_productions(result)) return { result, false };
+
+    return { result, true };
 }
 
-void find_undefined_names(const NormalizedProductionList& prodlist)
-{
-    using Entry = std::pair<const NonTerminal*, Location>;
-    struct Cmp
-    {
-        bool operator()(const Entry& lhs, const Entry& rhs) const
-        {
-            return lhs.first->name() < rhs.first->name();
-        }
-    };
-
-    using Set = std::set<Entry, Cmp>;
-
-    Set lhs_set;
-    for (auto prod : prodlist) lhs_set.insert({ prod->lhs(), prod->location() });
-
-    Set all_names;
-    for (auto prod : prodlist)
-        if (auto rhs = prod->rhs()->only_if<ItemSequence>())
-            for (auto item : rhs->sequence)
-                if (auto nt = item->only_if<NonTerminal>())
-                    all_names.insert({ nt, prod->location() });
-
-    if (lhs_set.size() != all_names.size())
-        for (auto entry : all_names)
-            if (lhs_set.find(entry) == lhs_set.end())
-                printf("%s(%d): error: name %s is undefined\n", grammar_file_name, entry.second.line(), entry.first->name().c_str());
-}
+void find_unreachable_names(const NormalizedProductionList& prodlist) {}
 
 // Read in the grammar file and return the list of productions.
 ProductionList read_grammar(const char* fname)
@@ -1268,7 +1328,8 @@ void compute_first_sets(const ProductionList& prods)
     printf("%lu productions\n", prods.size());
     printf("%s\n", Parser::productions_text(prods).c_str());
     printf("after normalizing:\n");
-    NormalizedProductionList normprods = normalize(prods);
+    auto [normprods, success] = normalize(prods);
+    if (!success) return;
     printf("%lu productions\n", normprods.size());
     printf("%s\n", Parser::productions_text(normprods).c_str());
 
@@ -1278,7 +1339,6 @@ void compute_first_sets(const ProductionList& prods)
            parsing_sets.epsilon_set_text().c_str(),
            parsing_sets.predict_set_text().c_str(),
            parsing_sets.follow_set_text().c_str());
-    find_undefined_names(normprods);
 }
 
 int usage(const char* pname)

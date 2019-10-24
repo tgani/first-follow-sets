@@ -3,8 +3,12 @@ program:
 	;
 
 decls:
-	{ decls }
+	{ decl }
 	;
+
+doodad: { doodit } ;
+
+doodit : "ID" "<=>" expression ;
 
 decl:
         "var" "ID" type";"
