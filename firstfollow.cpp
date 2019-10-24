@@ -968,10 +968,11 @@ bool check_productions(const NormalizedProductionList& prodlist)
     for (auto prod : prodlist)
         if (visited_set.find(prod) == visited_set.end())
         {
-            printf("%s(%zu): warning: unreachable production '%s'\n",
-                   grammar_file_name,
-                   prod->location().line(),
-                   prod->lhs()->name().c_str());
+            if (prod->location().line() != Location::none) // invented nonterms have this line number
+                printf("%s(%zu): warning: unreachable production '%s'\n",
+                       grammar_file_name,
+                       prod->location().line(),
+                       prod->lhs()->name().c_str());
         }
     return result;
 }
