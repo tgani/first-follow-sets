@@ -262,18 +262,19 @@ public:
 enum class ItemKind
 {
     none,
-    terminal,
-    nonterminal,
-    epsilon,
-    alternatives,
-    sequence,
-    grouped_sequence
+    terminal,     // Anything in "..."
+    nonterminal,  // Any identifiers
+    epsilon,      // EPSILON
+    alternatives, // alt1 | alt2 | ...
+    sequence,     // RHS of A -> a1 a2... where a1 a2.. can be terminals, non terminals or grouped
+    grouped_sequence // { a1 a2... } or [ a1 a2... ] or ( a1 a2 ...)
 };
 
 struct Item
 {
-    ItemKind    kind_;
-    std::string name_;
+    ItemKind    kind_; // The kind of the item. Currenty not used as we dynamic_cast<>
+    std::string name_; // The name/identifier/literal string associated with the item.
+                       // Some don't have this or have just a description string.
 
     Item(ItemKind k, const std::string& name)
         : kind_ { k }
@@ -284,7 +285,7 @@ struct Item
     ItemKind           kind() const { return kind_; }
     const std::string& name() const { return name_; }
 
-    virtual ~Item() {}
+    virtual std::string to_string() const { return name(); }
 
     template <typename T> T* as()
     {
@@ -345,7 +346,21 @@ struct ItemSequence : Item
         : Item { ItemKind::sequence, "<item-sequence>" }
     {
     }
-    ItemList sequence;
+
+    virtual std::string to_string() const override
+    {
+        std::string buf;
+        bool        first = true;
+        for (auto item : sequence)
+        {
+            if (!first) buf += ' ';
+            buf += item->to_string();
+            first = false;
+        }
+        return buf;
+    }
+
+    ItemList sequence; // sequence of items on the RHS of a production.
 };
 
 // Type representing a list of alternatives in a production. This type will not be present
@@ -356,16 +371,30 @@ struct Alternatives : Item
         : Item { ItemKind::alternatives, "<alternatives>" }
     {
     }
-    ItemList alternatives;
+
+    virtual std::string to_string() const override
+    {
+        std::string buf;
+        bool        first = true;
+        for (auto alt : alternatives)
+        {
+            if (!first) buf += "| ";
+            buf += alt->to_string();
+            first = false;
+        }
+        return buf;
+    }
+
+    ItemList alternatives; // list of alternatives.
 };
 
 // Type representing a clause such as
-//	{ "+" Term }            contents occur 0 or more times
-//	[ "-" Expression ]      contents occur 0 or 1 time
+//  { "+" Term }            contents occur 0 or more times
+//  [ "-" Expression ]      contents occur 0 or 1 time
 //  ( "-" | "+" )           contents occur exactly 1 time
 struct GroupedItemSequence : Item
 {
-    Tok group_kind_;
+    Tok group_kind_; // What kind of grouping is it?
 
 public:
     Tok group_kind() const { return group_kind_; }
@@ -375,9 +404,24 @@ public:
     {
         assert(t == Tok::lbrace || t == Tok::lbrack || t == Tok::lparen);
     }
+
+    virtual std::string to_string() const override
+    {
+        std::string buf { Scanner::string_for_token(group_kind_) };
+        buf += contents->to_string();
+        switch (group_kind_)
+        {
+        case Tok::lparen: buf += ')'; break;
+        case Tok::lbrack: buf += ']'; break;
+        case Tok::lbrace: buf += '}'; break;
+        }
+        return buf;
+    }
+
     Item* contents; // Can be any arbitrary construct.
 };
 
+// Type representing a location. So far, only line numbers are tracked.
 struct Location
 {
     size_t line_ = 0;
@@ -398,9 +442,9 @@ struct Location
 // Type representing a production. "rhs" can be Epsilon, ItemSequence or Alternatives.
 struct Production
 {
-    NonTerminal* lhs_ = nullptr;
-    Item*        rhs_ = nullptr;
-    Location     loc_;
+    NonTerminal* lhs_ = nullptr; // LHS of the production
+    Item*        rhs_ = nullptr; // RHS of the production in full EBNF form
+    Location     loc_;           // Location of the LHS of the production
 
     Production(NonTerminal* lhs, Item* rhs, const Location& loc)
         : lhs_ { lhs }
@@ -422,14 +466,25 @@ struct Production
         assert(rhs_ == nullptr);
         rhs_ = item;
     }
+
+    std::string to_string() const
+    {
+        std::string buf;
+
+        buf += lhs_->to_string();
+        buf += " : ";
+        buf += rhs_->to_string();
+        return buf;
+    }
 };
 
 // Type representing a normalized production. "rhs" can be Epsilon or ItemSequence
 struct NormalizedProduction
 {
-    NonTerminal* lhs_ = nullptr;
-    Item*        rhs_ = nullptr;
-    Location     loc_;
+    NonTerminal* lhs_ = nullptr; // LHS of the production
+    Item*        rhs_ = nullptr; // RHS of the production. Either EPSILON or an nonterminal
+                                 // sequence in final normalized form.
+    Location loc_;               // Location of LHS of the production.
 
     NormalizedProduction(NonTerminal* lhs, const Location& loc)
         : lhs_ { lhs }
@@ -444,6 +499,16 @@ struct NormalizedProduction
     NonTerminal*       lhs() { return lhs_; }
     void               set_rhs(Item* item) { rhs_ = item; }
     const Location&    location() const { return loc_; }
+
+    std::string to_string() const
+    {
+        std::string buf;
+
+        buf += lhs_->to_string();
+        buf += " : ";
+        buf += rhs_->to_string();
+        return buf;
+    }
 };
 
 // Type representing a list of productions in the grammar.
@@ -457,8 +522,8 @@ struct CmpItem
 {
     bool operator()(const Item* lhs, const Item* rhs) const { return lhs->name() < rhs->name(); }
 };
-// Type representing function from terminal/non-terminals -> set of terminals, used in computing
-// FIRST and FOLLOW
+// Type representing function from terminal/non-terminals -> set of terminals, used in
+// computing FIRST and FOLLOW
 using TerminalSet          = std::set<const Terminal*, CmpItem>;
 using NonTerminalSet       = std::set<const NonTerminal*, CmpItem>;
 using ItemToTerminalSetMap = std::map<const Item*, TerminalSet*, CmpItem>;
@@ -505,6 +570,7 @@ public:
 
     void gettoken() { scn_.get(); }
 
+    // Parse a single terminal or non-terminal
     Item* scan_name_or_symbol()
     {
         if (next_is(Tok::id))
@@ -526,7 +592,8 @@ public:
         }
     }
 
-    GroupedItemSequence* scan_production_item_seq_clause()
+    // Parse { ... } ( ... ) or [ ... ]
+    GroupedItemSequence* scan_grouped_items()
     {
         auto group_clause = new GroupedItemSequence { token() };
         gettoken();
@@ -537,15 +604,16 @@ public:
         return group_clause;
     }
 
+    // Parse a general item on the RHS of a production.
     Item* scan_production_item()
     {
         if (next_is(Tok::lbrace) || next_is(Tok::lbrack) || next_is(Tok::lparen))
-        { return scan_production_item_seq_clause(); }
+        { return scan_grouped_items(); }
         return scan_name_or_symbol();
     }
 
-    // Parse a sequence of items. If more than 1 item exists build an ItemSequence. Else,
-    // return just the item.
+    // Parse a sequence of items. If more than 1 item exists build an ItemSequence.
+    // Else, return just the item.
     Item* scan_production_item_seq()
     {
         auto item = scan_production_item();
@@ -572,6 +640,7 @@ public:
         return result;
     }
 
+    // Parse one of alt1 | alt2 ...
     Item* scan_single_alternative()
     {
         if (next_is(Tok::epsilon))
@@ -584,7 +653,8 @@ public:
         return seq;
     }
     // Parse <alpha>| <beta> | ...
-    // If there is a single alternative, build and ItemSequence, otherwise build Alternatives.
+    // If there is a single alternative, build and ItemSequence, otherwise build
+    // Alternatives.
     Item* scan_alternatives()
     {
         auto prodalt = scan_single_alternative();
@@ -600,6 +670,7 @@ public:
         return alt;
     }
 
+    // Parse a production in EBNF form.
     Production* scan_production()
     {
         auto nonterm
@@ -612,6 +683,7 @@ public:
         return new Production { new NonTerminal { nonterm }, altlist, Location { line } };
     }
 
+    // Parse the entire grammar file.
     void parse()
     {
         // The grammar file is in the EBNF format, specified below in EBNF:
@@ -622,8 +694,8 @@ public:
         //      SingleAlternative = ProductionItemSeq | 'EPSILON'
         //      ProductionItemSeq = ProductionItem { ProductionItem }
         //      ProductionItem = NameOrSymbol | ProductionItemSeqClause
-        //      ProductionItemSeqClause = '{' Alternatives '}' | '[' Alternatives ']' | '('
-        //      Alternatives ')' NameOrSymbol = Identifier | LiteralInQuotes
+        //      ProductionItemSeqClause = '{' Alternatives '}' | '[' Alternatives ']' |
+        //      '(' Alternatives ')' NameOrSymbol = Identifier | LiteralInQuotes
         auto prod = scan_production();
         prods_.push_back(prod);
         while (next_is(Tok::id))
@@ -643,105 +715,26 @@ public:
         }
     }
 
-    static std::string production_item_text(const Item* proditem)
+    template<typename List>
+    static std::string to_string(const List& prodlist)
     {
         std::string buf;
-        switch (proditem->kind())
+        for (auto prod : prodlist)
         {
-        default: assert(false && "unreached"); break;
-        case ItemKind::alternatives:
-            buf += production_alternatives_text(proditem->as<Alternatives>());
-            break;
-        case ItemKind::epsilon: buf += "EPSILON "; break;
-        case ItemKind::grouped_sequence:
-            buf += grouped_item_sequence_text(proditem->as<GroupedItemSequence>());
-            break;
-        case ItemKind::nonterminal:
-            buf += proditem->as<NonTerminal>()->name();
-            buf += ' ';
-            break;
-        case ItemKind::sequence:
-            buf += production_item_seq_text(proditem->as<ItemSequence>());
-            break;
-        case ItemKind::terminal:
-            buf += proditem->as<Terminal>()->name();
-            buf += ' ';
-            break;
-        }
-        return buf;
-    }
-
-    static std::string production_item_seq_text(const ItemSequence* seq)
-    {
-        std::string buf;
-        for (auto&& item : seq->sequence) { buf += production_item_text(item); }
-        return buf;
-    }
-
-    static std::string grouped_item_sequence_text(const GroupedItemSequence* group_clause)
-    {
-        std::string buf;
-        buf += Scanner::string_for_token(group_clause->group_kind());
-        buf += production_item_text(group_clause->contents);
-        buf += (group_clause->group_kind() == Tok::lbrace
-                    ? '}'
-                    : (group_clause->group_kind() == Tok::lbrack ? ']' : ')'));
-        buf += ' ';
-        return buf;
-    }
-
-    static std::string production_alternatives_text(const Alternatives* prodalts)
-    {
-        std::string buf;
-        bool        first = true;
-        for (auto& item : prodalts->alternatives)
-        {
-            if (!first)
-            {
-                buf += '|';
-                buf += ' ';
-            }
-            buf += production_item_text(item);
-            first = false;
-        }
-        return buf;
-    }
-
-    static std::string productions_text(const ProductionList& prods)
-    {
-        std::string buf;
-        for (auto prod : prods)
-        {
-            buf += prod->lhs()->name();
-            buf += ' ';
-            buf += ':';
-            buf += ' ';
-            buf += production_item_text(prod->rhs());
-            buf += '\n';
-        }
-        return buf;
-    }
-    static std::string productions_text(const NormalizedProductionList& prods)
-    {
-        std::string buf;
-        for (auto prod : prods)
-        {
-            buf += prod->lhs()->name();
-            buf += ' ';
-            buf += ':';
-            buf += ' ';
-            buf += production_item_text(prod->rhs());
+            buf += prod->to_string();
             buf += '\n';
         }
         return buf;
     }
 };
 
-// Given a production without alternatives (it may not be completely normalized yet), find all
-// the places where {} [] or () occur and return all such grouped clauses and their indices in
-// the ItemSequence. If an epsilon is on the RHS, it will be the only item.
+// Given a production without alternatives (it may not be completely normalized yet),
+// find all the places where {} [] or () occur and return all such grouped clauses and
+// their indices in the ItemSequence. If an epsilon is on the RHS, it will be the only
+// item.
 //
-// E.g., A -> B C D { E F } G [H I] will return std::pair<first={E F} [H I], second=0, 5>
+// E.g., A -> B C D { E F } G [H I] will return std::pair<first={E F} [H I], second=0,
+// 5>
 //
 std::pair<ItemList, std::vector<unsigned>>
 find_sequence_or_optional_clause(const NormalizedProduction* prod)
@@ -764,8 +757,9 @@ find_sequence_or_optional_clause(const NormalizedProduction* prod)
     return { clauses, locations };
 }
 
-// Replace grouped clauses in productions by invented non-terminals. Return the new production
-// and the list of invented non-terminals. E.g., for the above example, we shall return
+// Replace grouped clauses in productions by invented non-terminals. Return the new
+// production and the list of invented non-terminals. E.g., for the above example, we
+// shall return
 //    std::pair<first=B C D N1 G N2, second=N1, N2>
 std::pair<ItemList, std::vector<NonTerminal*>>
 replace_grouped_clauses(const Item* rhs, const std::vector<unsigned>& locations, unsigned name_seq)
@@ -794,8 +788,8 @@ replace_grouped_clauses(const Item* rhs, const std::vector<unsigned>& locations,
     return { std::move(itemseq), std::move(invented_nonterminals) };
 }
 
-// Add new productions for the invented nonterminals. E.g., for the above example, we shall
-// return with
+// Add new productions for the invented nonterminals. E.g., for the above example, we
+// shall return with
 //      prod_accum=
 //              N1 -> EPSILON
 //              N1 -> B C N1
@@ -865,17 +859,14 @@ void generate_invented_productions(const std::vector<NonTerminal*>& nt_list,
 //      A -> a1
 //      A -> a2
 // ...
-// Also, make sure Epsilon or ItemSeq are the only two type on RHS, even for single items. This
-// simplifies things in the rest of normalization.
+// Also, make sure Epsilon or ItemSeq are the only two type on RHS, even for single
+// items. This simplifies things in the rest of normalization.
 void remove_alternatives(const NormalizedProductionList& prodlist, NormalizedProductionList& result)
 {
 
     for (auto prod : prodlist)
     {
-        if (Debug)
-            printf("*** removing alternatives for %s -> %s\n",
-                   prod->lhs()->name().c_str(),
-                   Parser::production_item_text(prod->rhs()).c_str());
+        if (Debug) printf("*** removing alternatives for %s\n", prod->to_string().c_str());
 
         if (prod->rhs()->is<Alternatives>())
         {
@@ -936,8 +927,8 @@ void walk_productions(const NormalizedProduction*    prod,
                     }
 }
 
-// Check for undefined names and unreachable productions. Return false iff any such cases are found
-// and issue appropriate error messages.
+// Check for undefined names and unreachable productions. Return false iff any such
+// cases are found and issue appropriate error messages.
 bool check_productions(const NormalizedProductionList& prodlist)
 {
     // Map of non-terminals to their productions.
@@ -955,8 +946,8 @@ bool check_productions(const NormalizedProductionList& prodlist)
         if (prod->rhs()->is<Epsilon>()) continue;
         for (auto item : prod->rhs()->as<ItemSequence>()->sequence)
             if (auto nt = item->only_if<NonTerminal>())
-                // Find the production for the non-terminal; there might be multiple but we record
-                // only one in the map above since we compare by name.
+                // Find the production for the non-terminal; there might be multiple but
+                // we record only one in the map above since we compare by name.
                 if (auto iter = prodmap.find(nt); iter == prodmap.end())
                 {
                     printf("%s(%zu): error: undefined name '%s'\n",
@@ -966,8 +957,8 @@ bool check_productions(const NormalizedProductionList& prodlist)
                     result = false;
                 }
     }
-    // Step 3. Starting from the first production symbol, recursively walk the productions
-    // and diagnose productions which are not reached.
+    // Step 3. Starting from the first production symbol, recursively walk the
+    // productions and diagnose productions which are not reached.
     NormalizedProductionSet visited_set;
     walk_productions(prodlist[0], prodmap, visited_set);
     for (auto prod : prodlist)
@@ -988,7 +979,8 @@ bool check_productions(const NormalizedProductionList& prodlist)
 //      - No production alternatives
 //      - No production has () [] or {} forms
 //      - Only right recursion is used.
-// Return pair<normalized-productions, flag> where flag is true iff no errors are detected.
+// Return pair<normalized-productions, flag> where flag is true iff no errors are
+// detected.
 std::pair<NormalizedProductionList, bool> normalize(const ProductionList& prodlist)
 {
     NormalizedProductionList result;
@@ -1011,8 +1003,7 @@ std::pair<NormalizedProductionList, bool> normalize(const ProductionList& prodli
         bool alternatives_removed = (result.size() != loc_result.size());
 
         if (Debug)
-            printf("*** after removing alternatives:\n%s\n",
-                   Parser::productions_text(result).c_str());
+            printf("*** after removing alternatives:\n%s\n", Parser::to_string(result).c_str());
 
         // Step 2:
         // Convert all productions involving [] and {} in this fashion:
@@ -1033,10 +1024,10 @@ std::pair<NormalizedProductionList, bool> normalize(const ProductionList& prodli
         // can be converted to
         //      A -> <alpha> N <gamma>
         //      N -> <beta>
-        // For each sequence-or-optional-clause on the RHS we replace by invented non-terminals
-        // and for each such non-terminal add the above productions. Since <beta> in the above
-        // cases itself can contain an alternative clause, we need to do this iteratively till
-        // there are no such clauses left.
+        // For each sequence-or-optional-clause on the RHS we replace by invented
+        // non-terminals and for each such non-terminal add the above productions. Since
+        // <beta> in the above cases itself can contain an alternative clause, we need
+        // to do this iteratively till there are no such clauses left.
         NormalizedProductionList invented_productions;
         for (auto normprod : result)
         {
@@ -1059,8 +1050,7 @@ std::pair<NormalizedProductionList, bool> normalize(const ProductionList& prodli
         something_to_do = invented_productions.size() > 0 || alternatives_removed;
         result.insert(result.end(), invented_productions.begin(), invented_productions.end());
         if (Debug)
-            printf("*** after transforming sequences:\n%s\n",
-                   Parser::productions_text(result).c_str());
+            printf("*** after transforming sequences:\n%s\n", Parser::to_string(result).c_str());
     }
 
     // Final checks.
@@ -1189,10 +1179,7 @@ struct TopDownParsingSets
     {
         for (auto&& P : prods_)
         {
-            if (Debug)
-                printf("*** predict: prod'n: %s->%s\n",
-                       Parser::production_item_text(P->lhs()).c_str(),
-                       Parser::production_item_text(P->rhs()).c_str());
+            if (Debug) printf("*** predict: prod'n: %s\n", P->to_string().c_str());
 
             if (P->rhs()->is<Epsilon>()) continue;
             auto&& first_elem = P->rhs()->as<ItemSequence>()->sequence[0];
@@ -1219,10 +1206,7 @@ struct TopDownParsingSets
     {
         for (auto&& P : prods_)
         {
-            if (Debug)
-                printf("*** follow: prod'n: %s->%s\n",
-                       Parser::production_item_text(P->lhs()).c_str(),
-                       Parser::production_item_text(P->rhs()).c_str());
+            if (Debug) printf("*** follow: prod'n: %s\n", P->to_string().c_str());
 
             if (P->rhs()->is<Epsilon>()) continue;
             auto&& items = P->rhs()->as<ItemSequence>()->sequence;
@@ -1318,14 +1302,14 @@ struct TopDownParsingSets
 void compute_first_sets(const ProductionList& prods)
 {
     printf("%lu productions\n", prods.size());
-    if (Debug) printf("%s\n", Parser::productions_text(prods).c_str());
+    if (Debug) printf("%s\n", Parser::to_string(prods).c_str());
     auto [normprods, success] = normalize(prods);
     if (!success) return;
     if (dump_normalized_grammar)
     {
         printf("after normalizing:\n");
         printf("%lu productions\n", normprods.size());
-        printf("%s\n", Parser::productions_text(normprods).c_str());
+        printf("%s\n", Parser::to_string(normprods).c_str());
     }
     TopDownParsingSets parsing_sets { normprods };
     parsing_sets.compute();
@@ -1336,7 +1320,8 @@ void compute_first_sets(const ProductionList& prods)
 
 int usage(const char* pname)
 {
-    fprintf(stderr, "usage: %s [--normalized] [--predict] [--follow] [--all] GRAMMAR-FILE\n", pname);
+    fprintf(
+        stderr, "usage: %s [--normalized] [--predict] [--follow] [--all] GRAMMAR-FILE\n", pname);
     return 2;
 }
 
