@@ -715,8 +715,7 @@ public:
         }
     }
 
-    template<typename List>
-    static std::string to_string(const List& prodlist)
+    template <typename List> static std::string to_string(const List& prodlist)
     {
         std::string buf;
         for (auto prod : prodlist)
@@ -944,7 +943,17 @@ bool check_productions(const NormalizedProductionList& prodlist)
     for (auto prod : prodlist)
     {
         if (prod->rhs()->is<Epsilon>()) continue;
+        bool first_item = true;
         for (auto item : prod->rhs()->as<ItemSequence>()->sequence)
+        {
+            if (auto nt = item->only_if<NonTerminal>(); nt != nullptr && nt->name() == prod->lhs()->name())
+            {
+                printf("%s(%zu): warning: production '%s' is left recursive\n",
+                       grammar_file_name,
+                       prod->location().line(),
+                       prod->lhs()->name().c_str());
+            }
+            first_item = false;
             if (auto nt = item->only_if<NonTerminal>())
                 // Find the production for the non-terminal; there might be multiple but
                 // we record only one in the map above since we compare by name.
@@ -956,21 +965,21 @@ bool check_productions(const NormalizedProductionList& prodlist)
                            nt->name().c_str());
                     result = false;
                 }
+        }
     }
-    // Step 3. Starting from the first production symbol, recursively walk the
+    // Pass 3. Starting from the first production symbol, recursively walk the
     // productions and diagnose productions which are not reached.
     NormalizedProductionSet visited_set;
     walk_productions(prodlist[0], prodmap, visited_set);
     for (auto prod : prodlist)
         if (visited_set.find(prod) == visited_set.end())
-        {
             if (prod->location().line()
                 != Location::none) // invented nonterms have this line number
                 printf("%s(%zu): warning: unreachable production '%s'\n",
                        grammar_file_name,
                        prod->location().line(),
                        prod->lhs()->name().c_str());
-        }
+
     return result;
 }
 
