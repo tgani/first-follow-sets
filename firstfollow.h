@@ -8,3 +8,6 @@
 #include <type_traits>
 #include <vector>
 #include <queue>
+#include "scanner.h"
+#include "ast.h"
+#include "parser.h"
