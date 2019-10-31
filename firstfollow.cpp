@@ -404,7 +404,7 @@ struct TopDownParsingSets
         for (auto&& elem : seq)
         {
             // This is not a non-terminal. Sequence cannot be nullable.
-            if (!elem->only_if<NonTerminal>()) return false;
+            if (!elem->is<NonTerminal>()) return false;
 
             if (epsilon_.find(elem->as<NonTerminal>()) == epsilon_.end()) return false;
         }
