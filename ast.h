@@ -3,14 +3,16 @@
 enum class ItemKind
 {
     none,
-    terminal,     // Anything in "..."
-    nonterminal,  // Any identifiers
-    epsilon,      // EPSILON
-    alternatives, // alt1 | alt2 | ...
-    sequence,     // RHS of A -> a1 a2... where a1 a2.. can be terminals, non terminals or grouped
+    terminal,        // Anything in "..."
+    nonterminal,     // Any identifiers
+    epsilon,         // EPSILON
+    alternatives,    // alt1 | alt2 | ...
+    sequence,        // RHS of A -> a1 a2... where a1 a2.. can be terminals, non terminals or grouped
     grouped_sequence // { a1 a2... } or [ a1 a2... ] or ( a1 a2 ...)
 };
 
+// Abstract base-class for hierarchy of types representing terminals, epsilon, non-terminals,
+// productions and normalized productions.
 struct Item
 {
     ItemKind    kind_; // The kind of the item. Currenty not used as we dynamic_cast<>
@@ -18,8 +20,8 @@ struct Item
                        // Some don't have this or have just a description string.
 
     Item(ItemKind k, const std::string& name)
-        : kind_ { k }
-        , name_ { name }
+        : kind_{ k }
+        , name_{ name }
     {
     }
 
@@ -28,25 +30,30 @@ struct Item
 
     virtual std::string to_string() const { return name(); }
 
-    template <typename T> T* as()
+    template <typename T>
+    T* as()
     {
         static_assert(std::is_base_of_v<Item, T>);
         assert(is<T>());
         return dynamic_cast<T*>(this);
     }
 
-    template <typename T> const T* as() const
+    template <typename T>
+    const T* as() const
     {
         static_assert(std::is_base_of_v<Item, T>);
         assert(is<T>());
         return dynamic_cast<const T*>(this);
     }
 
-    template <typename T> const T* only_if() const { return dynamic_cast<const T*>(this); }
+    template <typename T>
+    const T* only_if() const { return dynamic_cast<const T*>(this); }
 
-    template <typename T> T* only_if() { return dynamic_cast<T*>(this); }
+    template <typename T>
+    T* only_if() { return dynamic_cast<T*>(this); }
 
-    template <typename T> bool is() const { return this->only_if<T>() != nullptr; }
+    template <typename T>
+    bool is() const { return this->only_if<T>() != nullptr; }
 };
 
 using ItemList = std::vector<Item*>;
@@ -55,7 +62,7 @@ using ItemList = std::vector<Item*>;
 struct Terminal : Item
 {
     Terminal(const std::string& n)
-        : Item { ItemKind::terminal, n }
+        : Item{ ItemKind::terminal, n }
     {
     }
 };
@@ -64,18 +71,16 @@ struct Terminal : Item
 struct Epsilon : Item
 {
     Epsilon()
-        : Item { ItemKind::epsilon, "EPSILON" }
+        : Item{ ItemKind::epsilon, "EPSILON" }
     {
     }
 };
-
-struct NormalizedProduction; // Forward decl.
 
 // Type representing a non-terminal, which appears on the LHS of productions.
 struct NonTerminal : Item
 {
     NonTerminal(const std::string& n)
-        : Item { ItemKind::nonterminal, n }
+        : Item{ ItemKind::nonterminal, n }
     {
     }
 };
@@ -84,7 +89,7 @@ struct NonTerminal : Item
 struct ItemSequence : Item
 {
     ItemSequence()
-        : Item { ItemKind::sequence, "<item-sequence>" }
+        : Item{ ItemKind::sequence, "<item-sequence>" }
     {
     }
 
@@ -94,7 +99,8 @@ struct ItemSequence : Item
         bool        first = true;
         for (auto item : sequence)
         {
-            if (!first) buf += ' ';
+            if (!first)
+                buf += ' ';
             buf += item->to_string();
             first = false;
         }
@@ -109,7 +115,7 @@ struct ItemSequence : Item
 struct Alternatives : Item
 {
     Alternatives()
-        : Item { ItemKind::alternatives, "<alternatives>" }
+        : Item{ ItemKind::alternatives, "<alternatives>" }
     {
     }
 
@@ -119,7 +125,8 @@ struct Alternatives : Item
         bool        first = true;
         for (auto alt : alternatives)
         {
-            if (!first) buf += "| ";
+            if (!first)
+                buf += "| ";
             buf += alt->to_string();
             first = false;
         }
@@ -140,21 +147,27 @@ struct GroupedItemSequence : Item
 public:
     Tok group_kind() const { return group_kind_; }
     GroupedItemSequence(Tok t)
-        : Item { ItemKind::grouped_sequence, "<grouped-item-sequence>" }
-        , group_kind_ { t }
+        : Item{ ItemKind::grouped_sequence, "<grouped-item-sequence>" }
+        , group_kind_{ t }
     {
         assert(t == Tok::lbrace || t == Tok::lbrack || t == Tok::lparen);
     }
 
     virtual std::string to_string() const override
     {
-        std::string buf { Scanner::string_for_token(group_kind_) };
+        std::string buf{ Scanner::string_for_token(group_kind_) };
         buf += contents->to_string();
         switch (group_kind_)
         {
-        case Tok::lparen: buf += ')'; break;
-        case Tok::lbrack: buf += ']'; break;
-        case Tok::lbrace: buf += '}'; break;
+            case Tok::lparen:
+                buf += ')';
+                break;
+            case Tok::lbrack:
+                buf += ']';
+                break;
+            case Tok::lbrace:
+                buf += '}';
+                break;
         }
         return buf;
     }
@@ -174,7 +187,7 @@ struct Location
     static constexpr size_t none = 0xffffffff;
 
     Location(size_t l)
-        : line_ { l }
+        : line_{ l }
     {
         assert(l != 0 && "line numbers begin with 1");
     }
@@ -188,9 +201,9 @@ struct Production
     Location     loc_;           // Location of the LHS of the production
 
     Production(NonTerminal* lhs, Item* rhs, const Location& loc)
-        : lhs_ { lhs }
-        , rhs_ { rhs }
-        , loc_ { loc }
+        : lhs_{ lhs }
+        , rhs_{ rhs }
+        , loc_{ loc }
     {
     }
 
@@ -228,8 +241,8 @@ struct NormalizedProduction
     Location loc_;               // Location of LHS of the production.
 
     NormalizedProduction(NonTerminal* lhs, const Location& loc)
-        : lhs_ { lhs }
-        , loc_ { loc }
+        : lhs_{ lhs }
+        , loc_{ loc }
     {
         assert(lhs_->is<NonTerminal>());
     }

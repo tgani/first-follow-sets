@@ -6,10 +6,6 @@ decls:
 	{ decl }
 	;
 
-doodad: { doodit } ;
-
-doodit : "ID" "<=>" expression ;
-
 decl:
         "var" "ID" type";"
     |   function-definition
@@ -50,8 +46,7 @@ stmts:
 
 stmt:
         basic-stmt
-    |   "if" "(" expression ")" stmt
-    |   "if" "(" expression ")" stmt "else" stmt
+    |   "if" "(" expression ")" stmt [ "else" stmt ]
     |   "while" "(" expression ")" stmt
     |   "do" stmt "while" "(" expression ")" ";"
     |   "break" ";"
@@ -64,9 +59,12 @@ lvalue:
 	;
 
 basic-stmt:
-        lvalue "=" expression
-    |   function-call
+        assignment-expression
 	;
+
+assignment-expression:
+        expression { "=" expression }
+    ;
 
 expression:
         join { "||" join }
@@ -94,29 +92,30 @@ term:
 
 unary:
         ("!" | "-" | "+") unary
-    |   postfix-expression
-	;
-
-postfix-expression:
-        factor
-    |   function-call
-	;
-
-function-call:
-        factor "(" [ argument-list ] ")"
-	;
-
-
-argument-list: 
-        expression { "," expression }
+    |   factor
 	;
 
 factor:
+        postfix-expression { "^" postfix-expression }
+    ;
+
+postfix-expression:
+        primary  [  argument-list ] 
+	;
+
+
+
+argument-list: 
+        "(" [ expression { "," expression } ] ")"
+	;
+
+primary:
         "(" expression ")"
     |   lvalue
     |   "NUMBER"
     |   "CHAR-LITERAL"
     |   "true"
     |   "false"
+    |   "BLTIN"
 	;
 

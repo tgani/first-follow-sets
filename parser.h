@@ -12,7 +12,7 @@ struct Parser
     ProductionList prods_; // The list of productions parsed
 public:
     Parser(Scanner& scn)
-        : scn_ { scn }
+        : scn_{ scn }
     {
     }
 
@@ -22,7 +22,7 @@ public:
     {
         scn_.show_line();
         printf("%s(%zu): error: %s\n", scn_.filename(), scn_.lineno(), msg.c_str());
-        throw Syntax_error {};
+        throw Syntax_error{};
     }
 
     void require(Tok t)
@@ -53,31 +53,31 @@ public:
         {
             auto name = scn_.identifier();
             gettoken();
-            return new NonTerminal { name };
+            return new NonTerminal{ name };
         }
         else if (next_is(Tok::literal))
         {
             auto lit = scn_.literal();
             scn_.get();
-            return new Terminal { lit };
+            return new Terminal{ lit };
         }
         else
         {
-			using namespace std::literals;
+            using namespace std::literals;
             syntax_error("unexpected token "s + scn_.curr_token_str());
-            return new Epsilon {}; // not reached.
+            return new Epsilon{}; // not reached.
         }
     }
 
     // Parse { ... } ( ... ) or [ ... ]
     GroupedItemSequence* scan_grouped_items()
     {
-        auto group_clause = new GroupedItemSequence { token() };
+        auto group_clause = new GroupedItemSequence{ token() };
         gettoken();
         group_clause->contents = scan_alternatives();
         require(group_clause->group_kind() == Tok::lbrace
-                    ? Tok::rbrace
-                    : group_clause->group_kind() == Tok::lbrack ? Tok::rbrack : Tok::rparen);
+                ? Tok::rbrace
+                : group_clause->group_kind() == Tok::lbrack ? Tok::rbrack : Tok::rparen);
         return group_clause;
     }
 
@@ -85,7 +85,9 @@ public:
     Item* scan_production_item()
     {
         if (next_is(Tok::lbrace) || next_is(Tok::lbrack) || next_is(Tok::lparen))
-        { return scan_grouped_items(); }
+        {
+            return scan_grouped_items();
+        }
         return scan_name_or_symbol();
     }
 
@@ -94,13 +96,13 @@ public:
     Item* scan_production_item_seq()
     {
         auto item = scan_production_item();
-        if (!(next_is(Tok::id) || next_is(Tok::literal) || next_is(Tok::lbrace)
-              || next_is(Tok::lbrack) || next_is(Tok::lparen)))
-        { return item; }
+        if (!(next_is(Tok::id) || next_is(Tok::literal) || next_is(Tok::lbrace) || next_is(Tok::lbrack) || next_is(Tok::lparen)))
+        {
+            return item;
+        }
         auto result = new ItemSequence;
         result->sequence.push_back(item);
-        while (next_is(Tok::id) || next_is(Tok::literal) || next_is(Tok::lbrace)
-               || next_is(Tok::lbrack) || next_is(Tok::lparen))
+        while (next_is(Tok::id) || next_is(Tok::literal) || next_is(Tok::lbrace) || next_is(Tok::lbrack) || next_is(Tok::lparen))
         {
             item = scan_production_item();
             if (auto items = item->only_if<ItemSequence>())
@@ -122,7 +124,7 @@ public:
     {
         if (next_is(Tok::epsilon))
         {
-            auto item = new Epsilon {};
+            auto item = new Epsilon{};
             gettoken();
             return item;
         }
@@ -135,7 +137,10 @@ public:
     Item* scan_alternatives()
     {
         auto prodalt = scan_single_alternative();
-        if (!next_is(Tok::alt)) { return prodalt; }
+        if (!next_is(Tok::alt))
+        {
+            return prodalt;
+        }
         Alternatives* alt = new Alternatives;
         alt->alternatives.push_back(prodalt);
         while (next_is(Tok::alt))
@@ -150,14 +155,13 @@ public:
     // Parse a production in EBNF form.
     Production* scan_production()
     {
-        auto nonterm
-            = scn_.token() == Tok::id ? scn_.identifier() : ""; // guard against erroneous input
-        auto line = scn_.lineno();
+        auto nonterm = scn_.token() == Tok::id ? scn_.identifier() : ""; // guard against erroneous input
+        auto line    = scn_.lineno();
         require(Tok::id);
         require(Tok::colon);
         auto altlist = scan_alternatives();
         require(Tok::semi);
-        return new Production { new NonTerminal { nonterm }, altlist, Location { line } };
+        return new Production{ new NonTerminal{ nonterm }, altlist, Location{ line } };
     }
 
     // Parse the entire grammar file.
@@ -187,13 +191,14 @@ public:
         for (;;)
         {
             printf("%s\n", scn_.curr_token_str().c_str());
-            if (scn_.token() == Tok::eof) break;
+            if (scn_.token() == Tok::eof)
+                break;
             scn_.get();
         }
     }
 
-    template <typename List> 
-	static std::string to_string(const List& prodlist)
+    template <typename List>
+    static std::string to_string(const List& prodlist)
     {
         std::string buf;
         for (auto prod : prodlist)
