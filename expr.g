@@ -1,34 +1,14 @@
 program:
-        decls
-	;
-
-decls:
-	{ decl }
+        { decl }
 	;
 
 decl:
-        "var" "ID" type";"
-    |   function-definition
-	;
-
-function-definition:
-    function-decl block
-	;
-
-function-decl:
-    "func" "ID" "(" [ param-list ] ")" [ return-type ]
+        "var" "ID" type ";"
+    |   "func" "ID" "(" [ param-list ] ")" [ type ] block
 	;
 
 param-list:
         "ID" type { "," "ID" type }
-	;
-
-block:
-    "{" decls stmts "}"
-	;
-
-return-type:
-	type
 	;
 
 type:
@@ -40,33 +20,33 @@ basic-type:
         "char" | "bool" | "int" | "real"
 		;
 
+block:
+    "{" { decl } stmts "}"
+	;
+
 stmts:
 	{ stmt }
 	 ;
 
 stmt:
-        basic-stmt
-    |   "if" "(" expression ")" stmt [ "else" stmt ]
-    |   "while" "(" expression ")" stmt
-    |   "do" stmt "while" "(" expression ")" ";"
+        basic-stmt ";"
+    |   "if" "(" expr ")" stmt [ "else" stmt ] ";"
+    |   "while" "(" expr ")" stmt ";"
+    |   "do" stmt "while" "(" expr ")" ";"
     |   "break" ";"
-    |   "return" [ expression ] ";"
+    |   "return" [ expr ] ";"
     |   block
 	;
 
-lvalue:
-        "IDENT" { "[" expression "]" }
-	;
-
 basic-stmt:
-        assignment-expression
+        assign-expr
 	;
 
-assignment-expression:
-        expression { "=" expression }
+assign-expr:
+        expr { "=" expr }
     ;
 
-expression:
+expr:
         join { "||" join }
 	;
 
@@ -96,21 +76,25 @@ unary:
 	;
 
 factor:
-        postfix-expression { "^" postfix-expression }
+        postfix-expr { "^" postfix-expr }
     ;
 
-postfix-expression:
+postfix-expr:
         primary  [  argument-list ] 
 	;
 
 
 
 argument-list: 
-        "(" [ expression { "," expression } ] ")"
+        "(" [ expr { "," expr } ] ")"
+	;
+
+lvalue:
+        "IDENT" { "[" expr "]" }
 	;
 
 primary:
-        "(" expression ")"
+        "(" expr ")"
     |   lvalue
     |   "NUMBER"
     |   "CHAR-LITERAL"

@@ -8,6 +8,7 @@ using namespace std::string_literals;
 const char* grammar_file_name;
 bool        dump_normalized_grammar;
 bool        dump_epsilon_sets;
+bool        dump_predict_sets;
 bool        dump_first_sets;
 bool        dump_follow_sets;
 bool        dump_conflicts;
@@ -19,7 +20,7 @@ struct CmpItem
 };
 // Type representing function from terminal/non-terminals -> set of terminals, used in
 // computing FIRST and FOLLOW
-using TerminalSet          = std::set<const Terminal*, CmpItem>;
+using TerminalSet          = std::set<const Item*, CmpItem>;    // Epsilon or Terminals
 using NonTerminalSet       = std::set<const NonTerminal*, CmpItem>;
 using ItemToTerminalSetMap = std::map<const Item*, TerminalSet*, CmpItem>;
 
@@ -31,12 +32,12 @@ using ItemToTerminalSetMap = std::map<const Item*, TerminalSet*, CmpItem>;
 // E.g., A -> B C D { E F } G [H I] will return std::pair<first={E F} [H I], second=0,
 // 5>
 //
-std::pair<ItemList, std::vector<unsigned>>
+std::pair<ItemList, std::vector<size_t>>
 find_sequence_or_optional_clause(const NormalizedProduction* prod)
 {
     ItemList              clauses;
-    std::vector<unsigned> locations;
-    unsigned              loc = 0;
+    std::vector<size_t> locations;
+    size_t              loc = 0;
     auto                  rhs = prod->rhs();
     assert(rhs->is<Epsilon>() || rhs->is<ItemSequence>());
     if (rhs->is<Epsilon>())
@@ -60,14 +61,14 @@ find_sequence_or_optional_clause(const NormalizedProduction* prod)
 // shall return
 //    std::pair<first=B C D N1 G N2, second=N1, N2>
 std::pair<ItemList, std::vector<NonTerminal*>>
-replace_grouped_clauses(const Item* rhs, const std::vector<unsigned>& locations, unsigned name_seq)
+replace_grouped_clauses(const Item* rhs, const std::vector<size_t>& locations, size_t name_seq)
 {
     if (locations.size() == 0)
         return { {}, {} };
     ItemList                  itemseq;
     auto&&                    prodseq = rhs->as<ItemSequence>()->sequence;
     std::vector<NonTerminal*> invented_nonterminals;
-    unsigned                  i = 0;
+    size_t                  i = 0;
     for (auto loc : locations)
     {
         while (i < loc)
@@ -99,7 +100,7 @@ void generate_invented_productions(const std::vector<NonTerminal*>& nt_list,
     const ItemList&                                                 seq_clause_list,
     NormalizedProductionList&                                       prod_accum)
 {
-    unsigned clause_index = 0;
+    size_t clause_index = 0;
     assert(nt_list.size() == seq_clause_list.size());
     for (auto& item : seq_clause_list)
     {
@@ -312,7 +313,7 @@ std::pair<NormalizedProductionList, bool> normalize(const ProductionList& prodli
     }
 
     bool     something_to_do = true;
-    unsigned name_seq        = 1;
+    size_t name_seq        = 1;
     while (something_to_do)
     {
         // Step 1: remove alternatives and replace by expanded productions.
@@ -401,7 +402,7 @@ ProductionList read_grammar(const char* fname)
 struct TopDownParsingSets
 {
     NonTerminalSet           epsilon_;
-    ItemToTerminalSetMap     predict_, follow_;
+    ItemToTerminalSetMap     predict_, follow_, first_;
     bool                     any_changes_ = false;
     NormalizedProductionList prods_;
 
@@ -412,7 +413,10 @@ struct TopDownParsingSets
 
     bool is_member_of_epsilon(const Item* item)
     {
-        assert(item->is<NonTerminal>());
+        if (item->is<Terminal>())
+        {
+            return false;
+        }
         return epsilon_.find(item->as<NonTerminal>()) != epsilon_.end();
     }
 
@@ -420,10 +424,12 @@ struct TopDownParsingSets
     // epsilon. Note that due to the current knowledge of which of N1 N2
     // ... derive epsilon we may return a false negative but that's ok due to
     // the iterative nature of the process.
-    bool is_seq_nullable(const ItemList& seq)
+    bool is_seq_nullable(const ItemList& seq, size_t limit)
     {
-        for (auto&& elem : seq)
+        assert(limit <= seq.size());
+        for (size_t i = 0; i < limit; ++i)
         {
+            auto& elem = seq[i];
             // This is not a non-terminal. Sequence cannot be nullable.
             if (!elem->is<NonTerminal>())
                 return false;
@@ -433,6 +439,12 @@ struct TopDownParsingSets
         }
         return true;
     }
+
+    bool is_seq_nullable(const ItemList& seq)
+    {
+        return is_seq_nullable(seq, seq.size());
+    }
+
     // EPSILON contains:
     //  - Any non-terminal that has an epsilon production
     //  - Any non-terminal that has a production containing only non-terminals that are
@@ -454,8 +466,10 @@ struct TopDownParsingSets
         }
     }
 
-    void insert_into_set(ItemToTerminalSetMap& mapref, const Item* item, const Terminal* t)
+    void insert_into_set(ItemToTerminalSetMap& mapref, const Item* item, const Item* t)
     {
+        assert(item->is<NonTerminal>());
+        assert(t->is<Epsilon>() || t->is<Terminal>());
         auto iter = mapref.find(item);
         if (iter == mapref.end())
         {
@@ -471,12 +485,17 @@ struct TopDownParsingSets
         }
     }
 
-    void insert_into_predict_set(const Item* item, const Terminal* t)
+    void insert_into_predict_set(const Item* item, const Item* t)
     {
         insert_into_set(predict_, item, t);
     }
 
-    void insert_into_follow_set(const Item* item, const Terminal* t)
+    void insert_into_first_set(const Item* item, const Item* t)
+    {
+        insert_into_set(first_, item, t);
+    }
+
+    void insert_into_follow_set(const Item* item, const Item* t)
     {
         insert_into_set(follow_, item, t);
     }
@@ -495,7 +514,7 @@ struct TopDownParsingSets
     }
 
     TerminalSet& predict_set_for(const NonTerminal* nt) { return get_set_for(predict_, nt); }
-
+    TerminalSet& first_set_for(const NonTerminal* nt) { return get_set_for(first_, nt); }
     TerminalSet& follow_set_for(const NonTerminal* nt) { return get_set_for(follow_, nt); }
 
     // PREDICT(A) contains:
@@ -534,14 +553,104 @@ struct TopDownParsingSets
         }
     }
 
+    // First set S of a sequence Y_1 Y_2 ... Y_k is computed as:
+    //  - Add all the non-epsilon members of FIRST(Y_1) to S
+    //  - If epsilon is in FIRST(Y_1), add all the members of FIRST(Y_2) to S
+    //  - etc.
+    // If all of Y_1 Y_2 ... Y_k contains epsilon, add epsilon to S
+    TerminalSet first_set_of_seq(const ItemList& seq, size_t start_index)
+    {
+        // Examine a non-terminal sym and return true iff FIRST(sym) contains
+        // epsilon. Add non-epsilon symbols of sym to FIRST(P->lhs()) as a
+        // side effect.
+        TerminalSet result;
+        auto collect_first_set_of_symbol = [&result, this](const Item* sym) -> bool
+        {
+            if (sym->is<Terminal>())
+            {
+                result.insert(sym);
+                return false;
+            }
+            auto& first_Y1 = first_set_for(sym->as<NonTerminal>());
+            bool contains_epsilon = false;
+            for (auto&& item : first_Y1)
+            {
+                if (item->is<Epsilon>())
+                {
+                    contains_epsilon = true;
+                    continue;
+                }
+                assert(item->is<Terminal>());
+                result.insert(item);
+            }
+            return contains_epsilon;
+        };
+
+        bool prior_contains_epsilon = collect_first_set_of_symbol(seq[start_index]);
+        for (size_t i = start_index + 1; i < seq.size(); ++i)
+        {
+            if (!prior_contains_epsilon)
+                break;
+            prior_contains_epsilon = collect_first_set_of_symbol(seq[i]);
+        }
+        if (prior_contains_epsilon)
+            result.insert(new Epsilon);
+        return result;      // prior_contains_epsilon is true here IFF all contain epsilon
+    }
+
+    // FIRST(A) is defined as:
+    //  - if A is a terminal FIRST(A) = { A }
+    //  - if A -> epsilon is a production, then add epsilon to FIRST(A)
+    //  - if A is a non-terminal A -> Y1 Y2 ... Yk is a production and
+    //    all of Y1 Y2 ... Yk are in EPSILON, then add epsilon to FIRST(A)
+    //  - if A is a non-terminal and A -> Y1 Y2 ... Yk is a production then
+    //    add a to FIRST(A) if a is in FIRST(Yj) j < k and epsilon is in all
+    //    of FIRST(Yi) for 1 <= i < j.
+    // We shall not implement the first bullet since this is implicit.
+    void do_first()
+    {
+        for (auto&& P : prods_)
+        {
+            if (Debug)
+                printf("*** first : prod'n: %s\n", P->to_string().c_str());
+            if (P->rhs()->is<Epsilon>())
+            {
+                insert_into_first_set(P->lhs(), P->rhs());
+                continue;
+            }
+            auto& seq = P->rhs()->as<ItemSequence>()->sequence;
+            // Compute S = FIRST(Y_1 Y_2 ... Y_k) as follows:
+            //  - Add all the non-epsilon symbols of FIRST(X1) to S
+            //  - for all i from 2 to k do
+            //      if FIRST(Y_{i-1}) contains epsilon then
+            //          add all non-epsilon symbols of Y_i to S
+            //  - if all of FIRST(Y_1) to FIRST(Y_k) contain epsilon then
+            //      add epsilon to S
+            // Finally, FIRST(A) = FIRST(A) union S, which we do simply by
+            // using FIRST(A) for S.
+
+            for (auto&& item : first_set_of_seq(seq, 0))
+                insert_into_first_set(P->lhs(), item);
+        }
+    }
+
+
     // FOLLOW(A) contains:
     //  - Any terminal that immediately follows A in any production
     //  - For any non-terminal B that immediately follows A in any production,
     //    all the tokens in PREDICT(B)
     //  - For any non-terminal B such that A appears rightmost in a production for
     //    B, every token in FOLLOW(B)
+
+    // FOLLOW(A) is defined as:
+    //  - the end of input marker is in FOLLOW(S), the start symbol
+    //  - if there is a production A -> alpha B beta, then everything in FIRST(beta) is
+    //    in FOLLOW(B)
+    //  - if there is a producton A -> alpha B or a production A -> alpha B beta where
+    //    FIRST(beta) contains epsilon, then everything in FOLLOW(A) is in FOLLOW(B)
     void do_follow()
     {
+#if 0
         for (auto&& P : prods_)
         {
             if (Debug)
@@ -583,6 +692,43 @@ struct TopDownParsingSets
                 }
             }
         }
+#else
+        for (auto&& P : prods_)
+        {
+            auto A = P->lhs();
+            if (P->rhs()->is<Epsilon>())
+                continue;
+            auto& seq = P->rhs()->as<ItemSequence>()->sequence;
+
+            for (size_t i = 0; i < seq.size(); ++i)
+            {
+                if (auto&& B = seq[i]->only_if<NonTerminal>())
+                {
+                    bool contains_epsilon = false;
+                    if (i < seq.size() - 1)
+                    {
+                        for (auto&& item : first_set_of_seq(seq, i + 1))
+                        {
+                            if (item->is<Epsilon>())
+                            {
+                                contains_epsilon = true;
+                                continue;
+                            }
+                            insert_into_follow_set(B, item);
+                        }
+                    }
+                    if (contains_epsilon || i == seq.size()-1)
+                    {
+                        auto& follow_lhs = follow_set_for(A);
+                        for (auto&& item : follow_lhs)
+                        {
+                            insert_into_follow_set(B, item);
+                        }
+                    }
+                }
+            }
+        }
+#endif
     }
 
     // The end of file symbol is in the follow set of the grammar start symbol which
@@ -602,7 +748,17 @@ struct TopDownParsingSets
             any_changes_ = false;
             do_epsilon();
             do_predict();
+            do_first();
             do_follow();
+            if (Debug)
+            {
+                printf("****\n");
+                printf("%s", epsilon_set_text().c_str());
+                printf("%s", predict_set_text().c_str());
+                printf("%s", first_set_text().c_str());
+                printf("%s", follow_set_text().c_str());
+                printf("+++++\n");
+            }
         } while (any_changes_);
     }
 
@@ -766,13 +922,13 @@ struct TopDownParsingSets
     }
 
     std::string predict_set_text() { return text_for_set("PREDICT", predict_); }
-
+    std::string first_set_text() { return text_for_set("FIRST", first_); }
     std::string follow_set_text() { return text_for_set("FOLLOW", follow_); }
 };
 
 void compute_first_sets(const ProductionList& prods)
 {
-    printf("%lu productions\n", prods.size());
+    printf("%zu productions\n", prods.size());
     if (Debug)
         printf("%s\n", Parser::to_string(prods).c_str());
     auto [normprods, success] = normalize(prods);
@@ -781,15 +937,17 @@ void compute_first_sets(const ProductionList& prods)
     if (dump_normalized_grammar)
     {
         printf("after normalizing:\n");
-        printf("%lu productions\n", normprods.size());
+        printf("%zu productions\n", normprods.size());
         printf("%s\n", Parser::to_string(normprods).c_str());
     }
     TopDownParsingSets parsing_sets{ normprods };
     parsing_sets.compute();
     if (dump_epsilon_sets)
         printf("%s", parsing_sets.epsilon_set_text().c_str());
-    if (dump_first_sets)
+    if (dump_predict_sets)
         printf("%s", parsing_sets.predict_set_text().c_str());
+    if (dump_first_sets)
+        printf("%s", parsing_sets.first_set_text().c_str());
     if (dump_follow_sets)
         printf("%s", parsing_sets.follow_set_text().c_str());
     if (dump_conflicts)
@@ -799,7 +957,7 @@ void compute_first_sets(const ProductionList& prods)
 int usage(const char* pname)
 {
     fprintf(
-        stderr, "usage: %s [--normalized] [--predict] [--follow] [--all] GRAMMAR-FILE\n", pname);
+        stderr, "usage: %s [--normalized] [--predict] [--first] [--follow] [--all] GRAMMAR-FILE\n", pname);
     return 2;
 }
 
@@ -812,6 +970,8 @@ void opts(int argc, char* argv[])
         else if ("--epsilon"s == argv[i])
             dump_epsilon_sets = true;
         else if ("--predict"s == argv[i])
+            dump_predict_sets = true;
+        else if ("--first"s == argv[i])
             dump_first_sets = true;
         else if ("--follow"s == argv[i])
             dump_follow_sets = true;
@@ -819,7 +979,8 @@ void opts(int argc, char* argv[])
             dump_conflicts = true;
         else if ("--all"s == argv[i])
         {
-            dump_normalized_grammar = dump_epsilon_sets = dump_first_sets = dump_follow_sets = dump_conflicts = true;
+            dump_normalized_grammar = dump_epsilon_sets = dump_predict_sets =
+                dump_first_sets = dump_follow_sets = dump_conflicts = true;
         }
         else if (grammar_file_name != nullptr)
             exit(usage(argv[0]));
