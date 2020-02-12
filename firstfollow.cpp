@@ -20,7 +20,7 @@ struct CmpItem
 };
 // Type representing function from terminal/non-terminals -> set of terminals, used in
 // computing FIRST and FOLLOW
-using TerminalSet          = std::set<const Item*, CmpItem>;    // Epsilon or Terminals
+using TerminalSet          = std::set<const Item*, CmpItem>; // Epsilon or Terminals
 using NonTerminalSet       = std::set<const NonTerminal*, CmpItem>;
 using ItemToTerminalSetMap = std::map<const Item*, TerminalSet*, CmpItem>;
 
@@ -35,10 +35,10 @@ using ItemToTerminalSetMap = std::map<const Item*, TerminalSet*, CmpItem>;
 std::pair<ItemList, std::vector<size_t>>
 find_sequence_or_optional_clause(const NormalizedProduction* prod)
 {
-    ItemList              clauses;
+    ItemList            clauses;
     std::vector<size_t> locations;
     size_t              loc = 0;
-    auto                  rhs = prod->rhs();
+    auto                rhs = prod->rhs();
     assert(rhs->is<Epsilon>() || rhs->is<ItemSequence>());
     if (rhs->is<Epsilon>())
     {
@@ -68,7 +68,7 @@ replace_grouped_clauses(const Item* rhs, const std::vector<size_t>& locations, s
     ItemList                  itemseq;
     auto&&                    prodseq = rhs->as<ItemSequence>()->sequence;
     std::vector<NonTerminal*> invented_nonterminals;
-    size_t                  i = 0;
+    size_t                    i = 0;
     for (auto loc : locations)
     {
         while (i < loc)
@@ -312,7 +312,7 @@ std::pair<NormalizedProductionList, bool> normalize(const ProductionList& prodli
         result.push_back(nprod);
     }
 
-    bool     something_to_do = true;
+    bool   something_to_do = true;
     size_t name_seq        = 1;
     while (something_to_do)
     {
@@ -564,15 +564,14 @@ struct TopDownParsingSets
         // epsilon. Add non-epsilon symbols of sym to FIRST(P->lhs()) as a
         // side effect.
         TerminalSet result;
-        auto collect_first_set_of_symbol = [&result, this](const Item* sym) -> bool
-        {
+        auto        collect_first_set_of_symbol = [&result, this](const Item* sym) -> bool {
             if (sym->is<Terminal>())
             {
                 result.insert(sym);
                 return false;
             }
-            auto& first_Y1 = first_set_for(sym->as<NonTerminal>());
-            bool contains_epsilon = false;
+            auto& first_Y1         = first_set_for(sym->as<NonTerminal>());
+            bool  contains_epsilon = false;
             for (auto&& item : first_Y1)
             {
                 if (item->is<Epsilon>())
@@ -595,7 +594,7 @@ struct TopDownParsingSets
         }
         if (prior_contains_epsilon)
             result.insert(new Epsilon);
-        return result;      // prior_contains_epsilon is true here IFF all contain epsilon
+        return result; // prior_contains_epsilon is true here IFF all contain epsilon
     }
 
     // FIRST(A) is defined as:
@@ -633,7 +632,6 @@ struct TopDownParsingSets
                 insert_into_first_set(P->lhs(), item);
         }
     }
-
 
     // FOLLOW(A) contains:
     //  - Any terminal that immediately follows A in any production
@@ -717,7 +715,7 @@ struct TopDownParsingSets
                             insert_into_follow_set(B, item);
                         }
                     }
-                    if (contains_epsilon || i == seq.size()-1)
+                    if (contains_epsilon || i == seq.size() - 1)
                     {
                         auto& follow_lhs = follow_set_for(A);
                         for (auto&& item : follow_lhs)
