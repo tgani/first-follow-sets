@@ -897,31 +897,48 @@ struct TopDownParsingSets
         return buf;
     }
 
+    static std::string unquote(const std::string& s)
+    {
+        if (s[0] != '"')
+            return s;
+        return std::string{ s.begin() + 1, s.end() - 1 };
+    }
+
     static std::string text_for_set(const char* name, const ItemToTerminalSetMap& mapref)
     {
         std::string buf;
+        // find maximum LHS length
+        size_t max_lhs_len = 0;
         for (auto&& entry : mapref)
         {
-            if (auto ptr = entry.first->only_if<NonTerminal>())
-            {
-                buf += name;
-                buf += "(";
-                buf += ptr->name();
-                buf += ") = { ";
+            auto len = entry.first->as<NonTerminal>()->name().size();
+            if (len > max_lhs_len)
+                max_lhs_len = len;
+        }
+        char buf2[1000];
+        sprintf(buf2, "%*s | %s\n", max_lhs_len, "NON-TERMINAL", name);
+        buf += buf2;
+        static const std::string dashes(max_lhs_len, '-');
+        sprintf(buf2, "%*s-+%s%s%s\n", max_lhs_len, dashes.c_str(), dashes.c_str(), dashes.c_str(), dashes.c_str());
+        buf += buf2;
+        for (auto&& entry : mapref)
+        {
+            auto ptr = entry.first->as<NonTerminal>();
+            sprintf(buf2, "%*s |", max_lhs_len, ptr->name().c_str());
+            buf += buf2;
                 for (auto t : *entry.second)
                 {
-                    buf += t->name();
-                    buf += ' ';
+                    buf += unquote(t->name());
+                    buf += " ";
                 }
-                buf += "}\n";
-            }
+                buf += '\n';
         }
         return buf;
     }
 
-    std::string predict_set_text() { return text_for_set("PREDICT", predict_); }
-    std::string first_set_text() { return text_for_set("FIRST", first_); }
-    std::string follow_set_text() { return text_for_set("FOLLOW", follow_); }
+    std::string predict_set_text() { return text_for_set("PREDICT-SET", predict_); }
+    std::string first_set_text() { return text_for_set("FIRST-SET", first_); }
+    std::string follow_set_text() { return text_for_set("FOLLOW-SET", follow_); }
 };
 
 void compute_first_sets(const ProductionList& prods)
@@ -941,13 +958,13 @@ void compute_first_sets(const ProductionList& prods)
     TopDownParsingSets parsing_sets{ normprods };
     parsing_sets.compute();
     if (dump_epsilon_sets)
-        printf("%s", parsing_sets.epsilon_set_text().c_str());
+        printf("%s\n", parsing_sets.epsilon_set_text().c_str());
     if (dump_predict_sets)
-        printf("%s", parsing_sets.predict_set_text().c_str());
+        printf("%s\n", parsing_sets.predict_set_text().c_str());
     if (dump_first_sets)
-        printf("%s", parsing_sets.first_set_text().c_str());
+        printf("%s\n", parsing_sets.first_set_text().c_str());
     if (dump_follow_sets)
-        printf("%s", parsing_sets.follow_set_text().c_str());
+        printf("%s\n", parsing_sets.follow_set_text().c_str());
     if (dump_conflicts)
         parsing_sets.check_LL1();
 }
