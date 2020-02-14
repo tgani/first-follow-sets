@@ -12,7 +12,7 @@ param-list:
 	;
 
 type:
-        "[" "NUMBER" "]" type
+        "[" arithexpr "]" type
     |   basic-type
 	;
 
